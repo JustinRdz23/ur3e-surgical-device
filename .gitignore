@@ -1,0 +1,11 @@
+# colcon build artifacts — always regenerated, never commit
+build/
+install/
+log/
+
+# third-party workspace, not vendored here — see README for setup instructions
+ros_ur_driver/
+
+# one-off debug artifacts
+frames_*.gv
+frames_*.pdf
