@@ -5,11 +5,41 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 17)
+endif()
+
 # find dependencies
 find_package(ament_cmake REQUIRED)
-# uncomment the following section in order to fill in
-# further dependencies manually.
-# find_package(<dependency> REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(control_msgs REQUIRED)
+find_package(moveit_msgs REQUIRED)
+
+add_executable(dual_servo_keyboard src/dual_servo_keyboard.cpp)
+ament_target_dependencies(dual_servo_keyboard
+  rclcpp
+  geometry_msgs
+  control_msgs
+  moveit_msgs
+)
+target_include_directories(dual_servo_keyboard PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
+
+install(TARGETS dual_servo_keyboard
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+# Install non-code assets so $(find dual_servo_ur3e) / FindPackageShare(...)
+# can locate them at runtime after this package is built.
+install(DIRECTORY
+  urdf
+  launch
+  config
+  rviz
+  DESTINATION share/${PROJECT_NAME}
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

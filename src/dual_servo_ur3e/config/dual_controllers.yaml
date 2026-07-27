@@ -1,0 +1,96 @@
+controller_manager:
+  ros__parameters:
+    justi_joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+    gracie_joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    justi_forward_position_controller:
+      type: position_controllers/JointGroupPositionController
+    gracie_forward_position_controller:
+      type: position_controllers/JointGroupPositionController
+
+    justi_scaled_joint_trajectory_controller:
+      type: ur_controllers/ScaledJointTrajectoryController
+    gracie_scaled_joint_trajectory_controller:
+      type: ur_controllers/ScaledJointTrajectoryController
+
+    enforce_command_limits: false
+
+justi_joint_state_broadcaster:
+  ros__parameters:
+    joints:
+      - justi_shoulder_pan_joint
+      - justi_shoulder_lift_joint
+      - justi_elbow_joint
+      - justi_wrist_1_joint
+      - justi_wrist_2_joint
+      - justi_wrist_3_joint
+
+gracie_joint_state_broadcaster:
+  ros__parameters:
+    joints:
+      - gracie_shoulder_pan_joint
+      - gracie_shoulder_lift_joint
+      - gracie_elbow_joint
+      - gracie_wrist_1_joint
+      - gracie_wrist_2_joint
+      - gracie_wrist_3_joint
+
+justi_forward_position_controller:
+  ros__parameters:
+    joints:
+      - justi_shoulder_pan_joint
+      - justi_shoulder_lift_joint
+      - justi_elbow_joint
+      - justi_wrist_1_joint
+      - justi_wrist_2_joint
+      - justi_wrist_3_joint
+
+gracie_forward_position_controller:
+  ros__parameters:
+    joints:
+      - gracie_shoulder_pan_joint
+      - gracie_shoulder_lift_joint
+      - gracie_elbow_joint
+      - gracie_wrist_1_joint
+      - gracie_wrist_2_joint
+      - gracie_wrist_3_joint
+
+justi_scaled_joint_trajectory_controller:
+  ros__parameters:
+    joints:
+      - justi_shoulder_pan_joint
+      - justi_shoulder_lift_joint
+      - justi_elbow_joint
+      - justi_wrist_1_joint
+      - justi_wrist_2_joint
+      - justi_wrist_3_joint
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+    state_publish_rate: 100.0
+    action_monitor_rate: 20.0
+    allow_partial_joints_goal: false
+    constraints:
+      stopped_velocity_tolerance: 0.2
+      goal_time: 0.0
+    speed_scaling_interface_name: justi_speed_scaling/speed_scaling_factor
+
+gracie_scaled_joint_trajectory_controller:
+  ros__parameters:
+    joints:
+      - gracie_shoulder_pan_joint
+      - gracie_shoulder_lift_joint
+      - gracie_elbow_joint
+      - gracie_wrist_1_joint
+      - gracie_wrist_2_joint
+      - gracie_wrist_3_joint
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+    state_publish_rate: 100.0
+    action_monitor_rate: 20.0
+    allow_partial_joints_goal: false
+    constraints:
+      stopped_velocity_tolerance: 0.2
+      goal_time: 0.0
+    speed_scaling_interface_name: gracie_speed_scaling/speed_scaling_factor

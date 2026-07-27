@@ -1,0 +1,88 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+
+  <xacro:include filename="$(find ur_description)/urdf/ur_macro.xacro"/>
+  <xacro:include filename="$(find ur_robot_driver)/urdf/ur.ros2_control.xacro"/>
+
+  <xacro:macro name="dual_ur3e_cell" params="
+    justi_kinematics_parameters_file
+    gracie_kinematics_parameters_file
+    joint_limits_parameters_file
+    physical_parameters_file
+    visual_parameters_file
+    justi_ip
+    gracie_ip
+    headless_mode
+    ur_script_filename
+    ur_output_recipe_filename
+    ur_input_recipe_filename
+    use_mock_hardware
+    mock_sensor_commands
+    ">
+
+    <link name="world"/>
+
+    <!-- Justi Robot (Left Side) -->
+    <xacro:ur_robot
+      name="justi"
+      tf_prefix="justi_"
+      parent="world"
+      joint_limits_parameters_file="${joint_limits_parameters_file}"
+      kinematics_parameters_file="${justi_kinematics_parameters_file}"
+      physical_parameters_file="${physical_parameters_file}"
+      visual_parameters_file="${visual_parameters_file}"
+    >
+      <origin xyz="-0.4 0 0" rpy="0 0 0" />
+    </xacro:ur_robot>
+
+    <!-- Gracie Robot (Right Side) -->
+    <xacro:ur_robot
+      name="gracie"
+      tf_prefix="gracie_"
+      parent="world"
+      joint_limits_parameters_file="${joint_limits_parameters_file}"
+      kinematics_parameters_file="${gracie_kinematics_parameters_file}"
+      physical_parameters_file="${physical_parameters_file}"
+      visual_parameters_file="${visual_parameters_file}"
+    >
+      <origin xyz="0.4 0 0" rpy="0 0 0" />
+    </xacro:ur_robot>
+
+    <!-- Justi Hardware Control -->
+    <xacro:ur_ros2_control
+      name="justi"
+      tf_prefix="justi_"
+      kinematics_parameters_file="${justi_kinematics_parameters_file}"
+      robot_ip="${justi_ip}"
+      use_mock_hardware="${use_mock_hardware}"
+      mock_sensor_commands="${mock_sensor_commands}"
+      headless_mode="${headless_mode}"
+      script_filename="${ur_script_filename}"
+      output_recipe_filename="${ur_output_recipe_filename}"
+      input_recipe_filename="${ur_input_recipe_filename}"
+      reverse_port="50001"
+      script_sender_port="50002"
+      trajectory_port="50003"
+      script_command_port="50004"
+    />
+
+    <!-- Gracie Hardware Control -->
+    <xacro:ur_ros2_control
+      name="gracie"
+      tf_prefix="gracie_"
+      kinematics_parameters_file="${gracie_kinematics_parameters_file}"
+      robot_ip="${gracie_ip}"
+      use_mock_hardware="${use_mock_hardware}"
+      mock_sensor_commands="${mock_sensor_commands}"
+      headless_mode="${headless_mode}"
+      script_filename="${ur_script_filename}"
+      output_recipe_filename="${ur_output_recipe_filename}"
+      input_recipe_filename="${ur_input_recipe_filename}"
+      reverse_port="50011"
+      script_sender_port="50012"
+      trajectory_port="50013"
+      script_command_port="50014"
+    />
+
+  </xacro:macro>
+</robot>

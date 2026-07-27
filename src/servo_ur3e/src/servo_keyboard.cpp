@@ -16,6 +16,12 @@
 // Define used keys
 namespace
 {
+constexpr int8_t KEYCODE_RIGHT = 0x43;
+constexpr int8_t KEYCODE_LEFT = 0x44;
+constexpr int8_t KEYCODE_UP = 0x41;
+constexpr int8_t KEYCODE_DOWN = 0x42;
+constexpr int8_t KEYCODE_PERIOD = 0x2E;
+constexpr int8_t KEYCODE_SEMICOLON = 0x3B;
 constexpr int8_t KEYCODE_1 = 0x31;
 constexpr int8_t KEYCODE_2 = 0x32;
 constexpr int8_t KEYCODE_3 = 0x33;
@@ -23,21 +29,15 @@ constexpr int8_t KEYCODE_4 = 0x34;
 constexpr int8_t KEYCODE_5 = 0x35;
 constexpr int8_t KEYCODE_6 = 0x36;
 constexpr int8_t KEYCODE_7 = 0x37;
+constexpr int8_t KEYCODE_Q = 0x71;
 constexpr int8_t KEYCODE_R = 0x72;
 constexpr int8_t KEYCODE_J = 0x6A;
 constexpr int8_t KEYCODE_T = 0x74;
-
-// qewasd keys
-constexpr int8_t KEYCODE_Q = 0x71;
-constexpr int8_t KEYCODE_E = 0x65;
 constexpr int8_t KEYCODE_W = 0x77;
-constexpr int8_t KEYCODE_A = 0x61;
-constexpr int8_t KEYCODE_S = 0x73;
-constexpr int8_t KEYCODE_D = 0x64;
-
-constexpr int8_t KEYCODE_SPACE = 0x20; 
+constexpr int8_t KEYCODE_E = 0x65;
 }  // namespace
 
+// Some constants used in the Servo Teleop demo
 namespace
 {
 const std::string TWIST_TOPIC = "/servo_node/delta_twist_cmds";
@@ -47,20 +47,21 @@ const std::string PLANNING_FRAME_ID = "base_link";
 const std::string EE_FRAME_ID = "tool0";
 
 constexpr double LINEAR_SPEED = 1;
-// Safety Timeout window: Stop moving if no terminal repeat signal within 200ms
-const rclcpp::Duration DEAD_MAN_TIMEOUT = rclcpp::Duration::from_seconds(0.2);
 }  // namespace
 
+// A class for reading the key inputs from the terminal
 class KeyboardReader
 {
 public:
   KeyboardReader() : file_descriptor_(0)
   {
 #ifndef WIN32
+    // get the console in raw mode
     tcgetattr(file_descriptor_, &cooked_);
     struct termios raw;
     memcpy(&raw, &cooked_, sizeof(struct termios));
     raw.c_lflag &= ~(ICANON | ECHO);
+    // Setting a new line, then end of file
     raw.c_cc[VEOL] = 1;
     raw.c_cc[VEOF] = 2;
     tcsetattr(file_descriptor_, TCSANOW, &raw);
@@ -92,6 +93,7 @@ private:
 #endif
 };
 
+// Converts key-presses to Twist or Jog commands for Servo, in lieu of a controller
 class KeyboardServo
 {
 public:
@@ -100,28 +102,16 @@ public:
 
 private:
   void spin();
-  void timerCallback();
 
   rclcpp::Node::SharedPtr nh_;
+
   rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_pub_;
   rclcpp::Publisher<control_msgs::msg::JointJog>::SharedPtr joint_pub_;
   rclcpp::Client<moveit_msgs::srv::ServoCommandType>::SharedPtr switch_input_;
-  rclcpp::TimerBase::SharedPtr timer_;
 
   std::shared_ptr<moveit_msgs::srv::ServoCommandType::Request> request_;
   double joint_vel_cmd_;
   std::string command_frame_id_;
-
-  double twist_x_ = 0.0;
-  double twist_y_ = 0.0;
-  double twist_z_ = 0.0;
-  std::vector<double> joint_vels_;
-
-  // TIMESTAMPS FOR DEAD-MAN'S TIMEOUT
-  rclcpp::Time last_x_time_;
-  rclcpp::Time last_y_time_;
-  rclcpp::Time last_z_time_;
-  std::vector<rclcpp::Time> last_joint_times_;
 };
 
 KeyboardServo::KeyboardServo() : joint_vel_cmd_(1.0), command_frame_id_{ "base_link" }
@@ -130,18 +120,9 @@ KeyboardServo::KeyboardServo() : joint_vel_cmd_(1.0), command_frame_id_{ "base_l
 
   twist_pub_ = nh_->create_publisher<geometry_msgs::msg::TwistStamped>(TWIST_TOPIC, ROS_QUEUE_SIZE);
   joint_pub_ = nh_->create_publisher<control_msgs::msg::JointJog>(JOINT_TOPIC, ROS_QUEUE_SIZE);
+
+  // Client for switching input types
   switch_input_ = nh_->create_client<moveit_msgs::srv::ServoCommandType>("servo_node/switch_command_type");
-
-  joint_vels_.resize(6, 0.0);
-  
-  // Initialize timestamps
-  rclcpp::Time epoch = nh_->now();
-  last_x_time_ = epoch;
-  last_y_time_ = epoch;
-  last_z_time_ = epoch;
-  last_joint_times_.resize(6, epoch);
-
-  timer_ = nh_->create_wall_timer(std::chrono::milliseconds(20), std::bind(&KeyboardServo::timerCallback, this));
 }
 
 KeyboardReader input;
@@ -178,61 +159,27 @@ void KeyboardServo::spin()
   }
 }
 
-void KeyboardServo::timerCallback()
-{
-  rclcpp::Time now = nh_->now();
-
-  // Evaluate Dead-Man's Timeouts per Axis
-  if (now - last_x_time_ > DEAD_MAN_TIMEOUT) twist_x_ = 0.0;
-  if (now - last_y_time_ > DEAD_MAN_TIMEOUT) twist_y_ = 0.0;
-  if (now - last_z_time_ > DEAD_MAN_TIMEOUT) twist_z_ = 0.0;
-
-  for (size_t i = 0; i < joint_vels_.size(); ++i)
-  {
-    if (now - last_joint_times_[i] > DEAD_MAN_TIMEOUT) joint_vels_[i] = 0.0;
-  }
-
-  // 1. Handle Simultaneous Twist Outputs
-  if (twist_x_ != 0.0 || twist_y_ != 0.0 || twist_z_ != 0.0)
-  {
-    auto twist_msg = std::make_unique<geometry_msgs::msg::TwistStamped>();
-    twist_msg->header.stamp = now;
-    twist_msg->header.frame_id = command_frame_id_;
-    twist_msg->twist.linear.x = twist_x_;
-    twist_msg->twist.linear.y = twist_y_;
-    twist_msg->twist.linear.z = twist_z_;
-    twist_pub_->publish(std::move(twist_msg));
-  }
-
-  // 2. Handle Simultaneous Joint Outputs
-  bool any_joint_active = false;
-  for(double v : joint_vels) { if (v != 0.0) any_joint_active = true; }
-
-  if (any_joint_active)
-  {
-    auto joint_msg = std::make_unique<control_msgs::msg::JointJog>();
-    joint_msg->header.stamp = now;
-    joint_msg->header.frame_id = PLANNING_FRAME_ID;
-    joint_msg->joint_names = { "shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
-                               "wrist_1_joint", "wrist_2_joint", "wrist_3_joint" };
-    joint_msg->velocities = joint_vels_;
-    joint_pub_->publish(std::move(joint_msg));
-  }
-}
-
 int KeyboardServo::keyLoop()
 {
   char c;
+  bool publish_twist = false;
+  bool publish_joint = false;
+
   std::thread{ [this]() { return spin(); } }.detach();
 
   puts("Reading from keyboard");
   puts("---------------------------");
-  puts("Hold keys down to move. Release keys to auto-stop (Dead-man logic).");
-  puts("Use w/s (X), a/d (Y), and q/e (Z) keys to Cartesian jog");
-  puts("Use 1|2|3|4|5|6|7 keys to joint jog. 'r' to reverse joint direction.");
+  puts("All commands are in the planning frame");
+  puts("Use arrow keys and the '.' and ';' keys to Cartesian jog");
+  puts("Use 1|2|3|4|5|6|7 keys to joint jog. 'r' to reverse the direction of jogging.");
+  puts("Use 'j' to select joint jog. ");
+  puts("Use 't' to select twist ");
+  puts("Use 'w' and 'e' to switch between sending command in planning frame or end effector frame");
+  puts("'Q' to quit.");
 
   for (;;)
   {
+    // get the next event from the keyboard
     try
     {
       input.readOne(&c);
@@ -243,48 +190,150 @@ int KeyboardServo::keyLoop()
       return -1;
     }
 
-    rclcpp::Time click_time = nh_->now();
+    RCLCPP_DEBUG(nh_->get_logger(), "value: 0x%02X\n", c);
 
+    // // Create the messages we might publish
+    auto twist_msg = std::make_unique<geometry_msgs::msg::TwistStamped>();
+    auto joint_msg = std::make_unique<control_msgs::msg::JointJog>();
+
+    joint_msg->joint_names.resize(6);
+    joint_msg->joint_names = { "shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
+                           "wrist_1_joint", "wrist_2_joint", "wrist_3_joint" };
+
+    joint_msg->velocities.resize(6);
+    std::fill(joint_msg->velocities.begin(), joint_msg->velocities.end(), 0.0);
+    // Use read key-press
     switch (c)
     {
-      case KEYCODE_W: twist_x_ = LINEAR_SPEED; last_x_time_ = click_time; break;
-      case KEYCODE_S: twist_x_ = -LINEAR_SPEED; last_x_time_ = click_time; break;
-      case KEYCODE_A: twist_y_ = -LINEAR_SPEED; last_y_time_ = click_time; break;
-      case KEYCODE_D: twist_y_ = LINEAR_SPEED; last_y_time_ = click_time; break;
-      case KEYCODE_Q: twist_z_ = -LINEAR_SPEED; last_z_time_ = click_time; break;
-      case KEYCODE_E: twist_z_ = LINEAR_SPEED; last_z_time_ = click_time; break;
-
-      case KEYCODE_1: joint_vels_[0] = joint_vel_cmd_; last_joint_times_[0] = click_time; break;
-      case KEYCODE_2: joint_vels_[1] = joint_vel_cmd_; last_joint_times_[1] = click_time; break;
-      case KEYCODE_3: joint_vels_[2] = joint_vel_cmd_; last_joint_times_[2] = click_time; break;
-      case KEYCODE_4: joint_vels_[3] = joint_vel_cmd_; last_joint_times_[3] = click_time; break;
-      case KEYCODE_5: joint_vels_[4] = joint_vel_cmd_; last_joint_times_[4] = click_time; break;
-      case KEYCODE_6: joint_vels_[5] = joint_vel_cmd_; last_joint_times_[5] = click_time; break;
-      
+      case KEYCODE_LEFT:
+        RCLCPP_DEBUG(nh_->get_logger(), "LEFT");
+        twist_msg->twist.linear.y = -LINEAR_SPEED;
+        publish_twist = true;
+        break;
+      case KEYCODE_RIGHT:
+        RCLCPP_DEBUG(nh_->get_logger(), "RIGHT");
+        twist_msg->twist.linear.y = LINEAR_SPEED;
+        publish_twist = true;
+        break;
+      case KEYCODE_UP:
+        RCLCPP_DEBUG(nh_->get_logger(), "UP");
+        twist_msg->twist.linear.x = LINEAR_SPEED;
+        publish_twist = true;
+        break;
+      case KEYCODE_DOWN:
+        RCLCPP_DEBUG(nh_->get_logger(), "DOWN");
+        twist_msg->twist.linear.x = -LINEAR_SPEED;
+        publish_twist = true;
+        break;
+      case KEYCODE_PERIOD:
+        RCLCPP_DEBUG(nh_->get_logger(), "PERIOD");
+        twist_msg->twist.linear.z = -LINEAR_SPEED;
+        publish_twist = true;
+        break;
+      case KEYCODE_SEMICOLON:
+        RCLCPP_DEBUG(nh_->get_logger(), "SEMICOLON");
+        twist_msg->twist.linear.z = LINEAR_SPEED;
+        publish_twist = true;
+        break;
+      case KEYCODE_1:
+        RCLCPP_DEBUG(nh_->get_logger(), "1");
+        joint_msg->velocities[0] = joint_vel_cmd_;
+        publish_joint = true;
+        break;
+      case KEYCODE_2:
+        RCLCPP_DEBUG(nh_->get_logger(), "2");
+        joint_msg->velocities[1] = joint_vel_cmd_;
+        publish_joint = true;
+        break;
+      case KEYCODE_3:
+        RCLCPP_DEBUG(nh_->get_logger(), "3");
+        joint_msg->velocities[2] = joint_vel_cmd_;
+        publish_joint = true;
+        break;
+      case KEYCODE_4:
+        RCLCPP_DEBUG(nh_->get_logger(), "4");
+        joint_msg->velocities[3] = joint_vel_cmd_;
+        publish_joint = true;
+        break;
+      case KEYCODE_5:
+        RCLCPP_DEBUG(nh_->get_logger(), "5");
+        joint_msg->velocities[4] = joint_vel_cmd_;
+        publish_joint = true;
+        break;
+      case KEYCODE_6:
+        RCLCPP_DEBUG(nh_->get_logger(), "6");
+        joint_msg->velocities[5] = joint_vel_cmd_;
+        publish_joint = true;
+        break;
       case KEYCODE_R:
+        RCLCPP_DEBUG(nh_->get_logger(), "r");
         joint_vel_cmd_ *= -1;
         break;
-
-      case KEYCODE_SPACE:
-        twist_x_ = 0.0; twist_y_ = 0.0; twist_z_ = 0.0;
-        std::fill(joint_vels_.begin(), joint_vels_.end(), 0.0);
-        break;
-
       case KEYCODE_J:
+        RCLCPP_DEBUG(nh_->get_logger(), "j");
         request_ = std::make_shared<moveit_msgs::srv::ServoCommandType::Request>();
         request_->command_type = moveit_msgs::srv::ServoCommandType::Request::JOINT_JOG;
-        if (switch_input_->wait_for_service(std::chrono::seconds(1))) {
+        if (switch_input_->wait_for_service(std::chrono::seconds(1)))
+        {
           auto result = switch_input_->async_send_request(request_);
+          if (result.get()->success)
+          {
+            RCLCPP_INFO_STREAM(nh_->get_logger(), "Switched to input type: JointJog");
+          }
+          else
+          {
+            RCLCPP_WARN_STREAM(nh_->get_logger(), "Could not switch input to: JointJog");
+          }
         }
         break;
       case KEYCODE_T:
+        RCLCPP_DEBUG(nh_->get_logger(), "t");
         request_ = std::make_shared<moveit_msgs::srv::ServoCommandType::Request>();
         request_->command_type = moveit_msgs::srv::ServoCommandType::Request::TWIST;
-        if (switch_input_->wait_for_service(std::chrono::seconds(1))) {
+        if (switch_input_->wait_for_service(std::chrono::seconds(1)))
+        {
           auto result = switch_input_->async_send_request(request_);
+          if (result.get()->success)
+          {
+            RCLCPP_INFO_STREAM(nh_->get_logger(), "Switched to input type: Twist");
+          }
+          else
+          {
+            RCLCPP_WARN_STREAM(nh_->get_logger(), "Could not switch input to: Twist");
+          }
         }
         break;
+      case KEYCODE_W:
+        RCLCPP_DEBUG(nh_->get_logger(), "w");
+        RCLCPP_INFO_STREAM(nh_->get_logger(), "Command frame set to: " << PLANNING_FRAME_ID);
+        command_frame_id_ = PLANNING_FRAME_ID;
+        break;
+      case KEYCODE_E:
+        RCLCPP_DEBUG(nh_->get_logger(), "e");
+        RCLCPP_INFO_STREAM(nh_->get_logger(), "Command frame set to: " << EE_FRAME_ID);
+        command_frame_id_ = EE_FRAME_ID;
+        break;
+      case KEYCODE_Q:
+        RCLCPP_DEBUG(nh_->get_logger(), "quit");
+        return 0;
+    }
+
+    // If a key requiring a publish was pressed, publish the message now
+    if (publish_twist)
+    {
+      twist_msg->header.stamp = nh_->now();
+      twist_msg->header.frame_id = command_frame_id_;
+      twist_pub_->publish(std::move(twist_msg));
+      publish_twist = false;
+    }
+    else if (publish_joint)
+    {
+      joint_msg->header.stamp = nh_->now();
+      joint_msg->header.frame_id = PLANNING_FRAME_ID;
+      joint_pub_->publish(std::move(joint_msg));
+      publish_joint = false;
     }
   }
+
   return 0;
 }

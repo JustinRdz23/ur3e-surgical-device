@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<robot name="dual_ur3e_cell" xmlns:xacro="http://ros.org/wiki/xacro">
+
+  <xacro:include filename="$(find dual_servo_ur3e)/urdf/dual_robot_cell_macro.xacro"/>
+  <xacro:include filename="$(find ur_robot_driver)/urdf/ur.ros2_control.xacro"/>
+
+  <xacro:arg name="justi_kinematics_parameters_file"
+             default="$(find dual_servo_ur3e)/config/justi_calibration.yaml"/>
+  <xacro:arg name="gracie_kinematics_parameters_file"
+             default="$(find dual_servo_ur3e)/config/gracie_calibration.yaml"/>
+  <xacro:arg name="joint_limits_parameters_file"
+             default="$(find ur_description)/config/ur3e/joint_limits.yaml"/>
+  <xacro:arg name="physical_parameters_file"
+             default="$(find ur_description)/config/ur3e/physical_parameters.yaml"/>
+  <xacro:arg name="visual_parameters_file"
+             default="$(find ur_description)/config/ur3e/visual_parameters.yaml"/>
+  
+  <xacro:arg name="justi_ip" 
+              default="192.168.56.101"/>
+  <xacro:arg name="gracie_ip" 
+              default="192.168.56.102"/>
+  <xacro:arg name="headless_mode" 
+              default="false" />
+  <xacro:arg name="ur_script_filename" 
+              default="$(find ur_client_library)/resources/external_control.urscript"/>
+  <xacro:arg name="ur_output_recipe_filename" 
+              default="$(find ur_robot_driver)/resources/rtde_output_recipe.txt"/>
+  <xacro:arg name="ur_input_recipe_filename" 
+              default="$(find ur_robot_driver)/resources/rtde_input_recipe.txt"/>
+  <xacro:arg name="use_mock_hardware" 
+              default="false" />
+  <xacro:arg name="mock_sensor_commands" 
+              default="false" />
+
+
+  <xacro:dual_ur3e_cell
+    justi_kinematics_parameters_file="$(arg justi_kinematics_parameters_file)"
+    gracie_kinematics_parameters_file="$(arg gracie_kinematics_parameters_file)"
+    joint_limits_parameters_file="$(arg joint_limits_parameters_file)"
+    physical_parameters_file="$(arg physical_parameters_file)"
+    visual_parameters_file="$(arg visual_parameters_file)"
+    justi_ip="$(arg justi_ip)"
+    gracie_ip="$(arg gracie_ip)"
+    headless_mode="$(arg headless_mode)"
+    ur_script_filename="$(arg ur_script_filename)"
+    ur_output_recipe_filename="$(arg ur_output_recipe_filename)"
+    ur_input_recipe_filename="$(arg ur_input_recipe_filename)"
+    use_mock_hardware="$(arg use_mock_hardware)"
+    mock_sensor_commands="$(arg mock_sensor_commands)"
+  />
+
+
+</robot>
