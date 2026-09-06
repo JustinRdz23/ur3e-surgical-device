@@ -1,37 +1,26 @@
-// this is for emacs file handling -*- mode: c++; indent-tabs-mode: nil -*-
+// //Add force_mode test executable to dual_servo_ur3e
 
-// -- BEGIN LICENSE BLOCK ----------------------------------------------
-// Copyright 2022 Universal Robots A/S
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
-//
-//    * Redistributions of source code must retain the above copyright
-//      notice, this list of conditions and the following disclaimer.
-//
-//    * Redistributions in binary form must reproduce the above copyright
-//      notice, this list of conditions and the following disclaimer in the
-//      documentation and/or other materials provided with the distribution.
-//
-//    * Neither the name of the {copyright_holder} nor the names of its
-//      contributors may be used to endorse or promote products derived from
-//      this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-// -- END LICENSE BLOCK ------------------------------------------------
+// Copies UR client library's force_mode_example.cpp as a standalone
+// test for validating force_mode as a freedrive substitute (freedrive
+// can't be combined with external force/torque commands per driver docs).
 
-// In a real-world example it would be better to get those values from command line parameters / a
-// better configuration system such as Boost.Program_options
+// Changes from original example:
+// - Bypassed checkCalibration() check (calibration constant not matched
+//   to this URDF; not needed for this exploratory test)
+// - Set startForceMode() to zero wrench, fully compliant on all 6 axes,
+//   to approximate freedrive-like transparency as a baseline
+
+// NOTE: must be run from the Universal_Robots_Client_Library workspace
+// directory (not this package's directory), since RTDE recipe files and
+// the external_control.urp reference are resolved via relative paths
+// inherited from the original example:
+
+//   cd ~/workspace/ros_ur_driver/src/Universal_Robots_Client_Library
+//   ros2 run dual_servo_ur3e force_mode <robot_ip> <seconds>
+
+// TODO: external_control.urp must exist in the target URSim container's
+// program storage (created via PolyScope) or the run will fail with
+// "Could not open script file"
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <ur_client_library/example_robot_wrapper.h>
@@ -40,6 +29,7 @@
 #include <ur_client_library/types.h>
 
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
@@ -49,9 +39,9 @@
 using namespace urcl;
 const std::string DEFAULT_ROBOT_IP = "192.168.56.101";
 
-const std::string PACKAGE_SHARE = ament_index_cpp::get_package_share_directory("dual_servo_ur3e");
+// const std::string PACKAGE_SHARE = ament_index_cpp::get_package_share_directory("dual_servo_ur3e");
 
-const std::string SCRIPT_FILE = PACKAGE_SHARE + "/resources/external_control.urscript";
+// const std::string SCRIPT_FILE = PACKAGE_SHARE + "/resources/external_control.urscript";
 const std::string OUTPUT_RECIPE = "examples/resources/rtde_output_recipe.txt";
 const std::string INPUT_RECIPE = "examples/resources/rtde_input_recipe.txt";
 
@@ -90,11 +80,11 @@ int main(int argc, char* argv[])
   g_my_robot = std::make_unique<ExampleRobotWrapper>(robot_ip, OUTPUT_RECIPE, INPUT_RECIPE, headless_mode,
                                                      "external_control.urp");
 
-//   if (!g_my_robot->isHealthy())
-//   {
-//     URCL_LOG_ERROR("Something in the robot initialization went wrong. Exiting. Please check the output above.");
-//     return 1;
-//   }
+  if (!g_my_robot->isHealthy())
+  {
+    URCL_LOG_ERROR("Something in the robot initialization went wrong. Exiting. Please check the output above.");
+    return 1;
+  }
 //   if (!g_my_robot->getUrDriver()->checkCalibration(CALIBRATION_CHECKSUM))
 //   {
 //     URCL_LOG_ERROR("Calibration checksum does not match actual robot.");
@@ -110,45 +100,59 @@ int main(int argc, char* argv[])
   // Start force mode
   // Task frame at the robot's base with limits being large enough to cover the whole workspace
   // Compliance in z axis and rotation around z axis
-  bool success;
-  if (g_my_robot->getUrDriver()->getVersion().major < 5)
-    success = g_my_robot->getUrDriver()->startForceMode({ 0, 0, 0, 0, 0, 0 },   // Task frame at the robot's base
-                                                        { 0, 0, 1, 0, 0, 1 },   // Compliance in z axis and rotation
-                                                                                // around z axis
-                                                        { 0, 0, -2, 0, 0, 0 },  // Press in -z direction
-                                                        2,  // do not transform the force frame at all
-                                                        { 0.1, 0.1, 1.5, 3.14, 3.14, 0.5 },  // limits
-                                                        0.005);  // damping_factor. See ScriptManual for details.
-  else
-  {
-    success = g_my_robot->getUrDriver()->startForceMode({ 0, 0, 0, 0, 0, 0 },   // Task frame at the robot's base
-                                                        { 0, 0, 1, 0, 0, 1 },   // Compliance in z axis and rotation
-                                                                                // around z axis
-                                                        { 0, 0, -2, 0, 0, 0 },  // Press in -z direction
-                                                        2,  // do not transform the force frame at all
-                                                        { 0.1, 0.1, 1.5, 3.14, 3.14, 0.5 },  // limits
-                                                        0.005,                               // damping_factor
-                                                        1.0);  // gain_scaling. See ScriptManual for details.
-  }
-  if (!success)
-  {
-    URCL_LOG_ERROR("Failed to start force mode.");
-    return 1;
-  }
 
+  auto test_start = std::chrono::steady_clock::now();
   std::chrono::duration<double> time_done(0);
   std::chrono::duration<double> timeout(second_to_run);
-  auto stopwatch_last = std::chrono::steady_clock::now();
-  auto stopwatch_now = stopwatch_last;
+
+  int iteration = 0;
+  auto last_iter_time = std::chrono::steady_clock::now();
+
+  URCL_LOG_INFO("Entering Force Mode test loop...");
+
   while (time_done < timeout || second_to_run.count() == 0)
   {
+    double t = std::chrono::duration<double>(std::chrono::steady_clock::now() - test_start).count();
+    double fz = -2.0 + std::sin(t * 2.0 * M_PI);
+
+    auto call_start = std::chrono::steady_clock::now();
+    bool success = g_my_robot->getUrDriver()->startForceMode(
+        { 0, 0, 0, 0, 0, 0 },
+        { 1, 1, 1, 1, 1, 1 },
+        { 0, fz, 0, 0, 0, 0 },
+        2,
+        { 0.1, 0.1, 1.5, 3.14, 3.14, 0.5 },
+        0.005,
+        1.0
+    );
+    auto call_end = std::chrono::steady_clock::now();
+
+    if (!success)
+    {
+      URCL_LOG_ERROR("Failed to set force mode frame at iteration %d.", iteration);
+      return 1;
+    }
+
     g_my_robot->getUrDriver()->writeKeepalive();
 
-    stopwatch_now = std::chrono::steady_clock::now();
-    time_done += stopwatch_now - stopwatch_last;
-    stopwatch_last = stopwatch_now;
+    // Measure actual loop period, not just the sleep duration
+    auto now = std::chrono::steady_clock::now();
+    double call_ms = std::chrono::duration<double, std::milli>(call_end - call_start).count();
+    double period_ms = std::chrono::duration<double, std::milli>(now - last_iter_time).count();
+    last_iter_time = now;
+
+    if (iteration % 100 == 0)  // log every 100th iteration, not every single one
+    {
+      URCL_LOG_INFO("iter=%d call=%.3fms period=%.3fms", iteration, call_ms, period_ms);
+    }
+    iteration++;
+
     std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    time_done = std::chrono::steady_clock::now() - test_start;
   }
-  URCL_LOG_INFO("Timeout reached.");
+
+  URCL_LOG_INFO("Timeout reached. Exiting force mode...");
   g_my_robot->getUrDriver()->endForceMode();
+
+  return 0;
 }
