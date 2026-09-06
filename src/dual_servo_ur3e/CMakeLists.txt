@@ -11,33 +11,46 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(ur_client_library REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(control_msgs REQUIRED)
 find_package(moveit_msgs REQUIRED)
 
 add_executable(dual_servo_keyboard src/dual_servo_keyboard.cpp)
+add_executable(force_mode src/force_mode.cpp)
 ament_target_dependencies(dual_servo_keyboard
   rclcpp
   geometry_msgs
   control_msgs
   moveit_msgs
 )
+
+ament_target_dependencies(force_mode
+  ament_index_cpp
+)
 target_include_directories(dual_servo_keyboard PRIVATE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
-
+target_include_directories(force_mode PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
+target_link_libraries(force_mode
+  ur_client_library::urcl
+)
 install(TARGETS dual_servo_keyboard
   DESTINATION lib/${PROJECT_NAME}
 )
+install(TARGETS force_mode
+  DESTINATION lib/${PROJECT_NAME})
 
-# Install non-code assets so $(find dual_servo_ur3e) / FindPackageShare(...)
-# can locate them at runtime after this package is built.
 install(DIRECTORY
   urdf
   launch
   config
   rviz
+  resources
   DESTINATION share/${PROJECT_NAME}
 )
 
