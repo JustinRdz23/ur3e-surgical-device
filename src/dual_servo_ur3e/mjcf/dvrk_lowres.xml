@@ -1,0 +1,118 @@
+This XML file does not appear to have any style information associated with it. The document tree is shown below.
+<mujoco model="dvrk_large_needle_driver_420006">
+<!-- 
+    MJCF reconstruction of the dVRK "Large Needle Driver 420006" instrument,
+    built from meshes in https://github.com/jhu-dvrk/instrument-cad (Large_Needle_Driver_420006).
+
+    IMPORTANT - READ BEFORE TRUSTING THE NUMBERS:
+    The CAD repo ships six independently-exported OBJ meshes (main_insert, roll_link,
+    pitch_link, yaw_link, gripper_left, gripper_right) with NO assembly file and NO
+    joint/kinematic data. There is no ground truth for exact joint pivot locations,
+    joint axes, or joint limits in that repo.
+
+    Everything below was reconstructed by:
+      1. Measuring each mesh's own bounding box / local origin (the meshes appear to
+         each be authored with their local Z axis as the part's own hinge/rotation
+         axis, and their own origin at the joint that connects them to their parent -
+         this pattern is consistent across roll/pitch/yaw/gripper parts).
+      2. Chaining bodies along the dominant extent of each parent mesh, with a fixed
+         body <quat> applied at each stage so the hinge directions alternate the way a
+         real EndoWrist-style wrist does: roll (shaft axis) -> pitch (perpendicular to
+         roll) -> yaw (perpendicular to pitch) -> two jaws (parallel to yaw).
+      3. Joint ranges and actuator torque limits are rough estimates based on published
+         typical EndoWrist wrist ranges (~±80 deg pitch/yaw, ~60 deg jaw), NOT
+         measured from this CAD or from Intuitive/dVRK's actual spec sheet.
+
+    Treat joint offsets/limits as a reasonable starting scaffold, not verified
+    ground truth. If you have access to dvrk_model's xacro/DH parameters or the
+    real instrument's spec sheet, replace the numbers marked "ESTIMATE" below.
+   -->
+<compiler angle="radian" meshdir="/home/justinrc/workspace/src/dual_servo_ur3e/mesh/low_res" autolimits="true"/>
+<option timestep="0.002" gravity="0 0 -9.81"/>
+<visual>
+<global offwidth="1280" offheight="960"/>
+</visual>
+<default>
+<default class="visual">
+<geom contype="0" conaffinity="0" group="2" density="0" rgba="0.85 0.86 0.88 1"/>
+</default>
+<default class="collision">
+<geom contype="1" conaffinity="1" group="3" rgba="0.9 0.3 0.2 0.3"/>
+</default>
+<joint damping="0.02" frictionloss="0.001"/>
+</default>
+<asset>
+<mesh name="tool_main_insert" file="tool_main_insert.OBJ"/>
+<mesh name="tool_roll_link" file="tool_roll_link.OBJ"/>
+<mesh name="tool_pitch_link" file="tool_pitch_link.OBJ"/>
+<mesh name="tool_yaw_link" file="tool_yaw_link.OBJ"/>
+<mesh name="gripper_left" file="gripper_left.OBJ"/>
+<mesh name="gripper_right" file="gripper_right.OBJ"/>
+<material name="steel" rgba="0.85 0.86 0.88 1" specular="0.6" shininess="0.5"/>
+<material name="dark_steel" rgba="0.25 0.26 0.29 1" specular="0.4" shininess="0.3"/>
+<texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="256" height="256"/>
+<texture name="grid" type="2d" builtin="checker" rgb1="0.2 0.2 0.2" rgb2="0.3 0.3 0.3" width="300" height="300"/>
+<material name="grid_mat" texture="grid" texrepeat="5 5" reflectance="0.1"/>
+</asset>
+<worldbody>
+<light pos="0.3 0.3 0.4" dir="-0.5 -0.5 -0.7" diffuse="0.8 0.8 0.8"/>
+<light pos="-0.3 0.2 0.3" dir="0.5 -0.3 -0.5" diffuse="0.4 0.4 0.4"/>
+<geom name="floor" type="plane" size="0.5 0.5 0.01" material="grid_mat" pos="0 0 -0.35"/>
+<camera name="closeup" pos="0.25 -0.25 0.15" xyaxes="0.7071 0.7071 0 -0.35 0.35 0.87" mode="fixed"/>
+<camera name="full_tool" pos="0.45 -0.45 0.1" xyaxes="0.7071 0.7071 0 -0.35 0.35 0.87" mode="fixed"/>
+<camera name="wrist_closeup" pos="0.03 -0.03 0.30" mode="targetbody" target="yaw_link"/>
+<!--  Fixed instrument housing / sterile adapter interface. Not actuated: this is
+         the part that plugs into the PSM instrument carriage.  -->
+<body name="instrument_mount" pos="0 0 0">
+<geom class="visual" type="mesh" mesh="tool_main_insert" material="dark_steel"/>
+<geom class="collision" type="box" size="0.05 0.02 0.04" pos="0 0 0" mass="0.15"/>
+<!--  ROLL: rotation of the whole shaft about its own long axis (local Z).  -->
+<body name="roll_link" pos="0 0 0.03669">
+<joint name="tool_roll" type="hinge" axis="0 0 1" range="-3.14159 3.14159" limited="true"/>
+<geom class="visual" type="mesh" mesh="tool_roll_link" material="steel"/>
+<geom class="collision" type="capsule" fromto="0 0 0 0 0 0.2178" size="0.008" mass="0.06"/>
+<!--  PITCH: wrist bends perpendicular to the shaft. Body is rotated -90 deg
+             about Y so the mesh's own local-Z hinge axis becomes perpendicular to the
+             shaft (global-ish X at rest), while the mesh's forward extent (local X)
+             continues straight out along the shaft direction (local Z of roll_link).  -->
+<body name="pitch_link" pos="0 0 0.2178" quat="0.7071068 0 -0.7071068 0">
+<joint name="wrist_pitch" type="hinge" axis="0 0 1" range="-1.3963 1.3963" limited="true"/>
+<geom class="visual" type="mesh" mesh="tool_pitch_link" material="steel"/>
+<geom class="collision" type="capsule" fromto="0 0 0 0.01133 0 0" size="0.004" mass="0.003"/>
+<!--  YAW: perpendicular to both roll and pitch axes. Body rotated -90 deg
+               about X on top of the pitch rotation so the chain continues straight
+               at the zero pose and the yaw hinge ends up orthogonal to pitch.  -->
+<body name="yaw_link" pos="0.01133 0 0" quat="0.7071068 -0.7071068 0 0">
+<joint name="wrist_yaw" type="hinge" axis="0 0 1" range="-1.3963 1.3963" limited="true"/>
+<geom class="visual" type="mesh" mesh="tool_yaw_link" material="dark_steel"/>
+<geom class="collision" type="capsule" fromto="0 0 0 0 0 0.00285" size="0.0006" mass="0.0005"/>
+<!--  JAWS: two independent gripper fingers, hinge axes parallel to the
+                 yaw axis (same convention, no extra rotation needed). Right jaw's
+                 axis is negated so a positive command on both opens the gripper
+                 symmetrically.  -->
+<body name="gripper_left" pos="0 0 0.00285">
+<joint name="jaw_left" type="hinge" axis="0 0 1" range="0 1.0472" limited="true"/>
+<geom class="visual" type="mesh" mesh="gripper_left" material="steel"/>
+<geom class="collision" type="capsule" fromto="0 0 0 0 0.00965 0" size="0.0024" mass="0.001"/>
+</body>
+<body name="gripper_right" pos="0 0 0.00285">
+<joint name="jaw_right" type="hinge" axis="0 0 -1" range="0 1.0472" limited="true"/>
+<geom class="visual" type="mesh" mesh="gripper_right" material="steel"/>
+<geom class="collision" type="capsule" fromto="0 0 0 0 0.00965 0" size="0.0024" mass="0.001"/>
+</body>
+</body>
+</body>
+</body>
+</body>
+</worldbody>
+<actuator>
+<!--  Torque limits are ESTIMATES (small values appropriate to this instrument's
+         tiny scale), not measured. Swap for <position> actuators if you want
+         servo-style control instead of raw torque.  -->
+<motor name="act_tool_roll" joint="tool_roll" ctrlrange="-0.05 0.05" gear="1"/>
+<motor name="act_wrist_pitch" joint="wrist_pitch" ctrlrange="-0.03 0.03" gear="1"/>
+<motor name="act_wrist_yaw" joint="wrist_yaw" ctrlrange="-0.03 0.03" gear="1"/>
+<motor name="act_jaw_left" joint="jaw_left" ctrlrange="-0.01 0.01" gear="1"/>
+<motor name="act_jaw_right" joint="jaw_right" ctrlrange="-0.01 0.01" gear="1"/>
+</actuator>
+</mujoco>
