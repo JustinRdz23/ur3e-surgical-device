@@ -1,6 +1,9 @@
 <mujoco model="dvrk_large_needle_driver">
-  <compiler angle = "degree" meshdir="/home/justinrc/workspace/src/dual_servo_ur3e/mesh/high_res"/>
+  <compiler angle = "degree" meshdir="/home/justinrc/workspace/src/dual_servo_ur3e_sim/mesh/high_res"/>
   <worldbody>
+    <light diffuse=".5 .5 .5" pos="0 0 10" dir="0 0 -1"/>
+    <geom type="plane" size="2 2 1" rgba="1 1 1 1" pos ="0 0 -0.02" />
+
     <body name="tool_main_insert_Shape_IndexedFaceSet.030" pos="0.0 0.0 0.0" quat="0.7071068286895752 0.7071067690849304 0.0 0.0">
       <geom type="mesh" name="tool_main_insert_Shape_IndexedFaceSet.030 geom" mesh="tool_main_insert_Shape_IndexedFaceSet.030" rgba="255.0 1.0 1.0 1.0"/>
       
