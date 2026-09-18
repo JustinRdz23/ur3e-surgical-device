@@ -1,0 +1,275 @@
+<mujoco model="laparoscopic_trainer">
+  <compiler angle="degree" meshdir="/home/justinrc/workspace/src/dual_servo_ur3e_sim/mesh/high_res"/>
+
+  <!-- ── Physics & rendering options ─────────────────────────────────────── -->
+  <option gravity="0 0 -9.81" timestep="0.002"/>
+
+  <visual>
+    <global offwidth="1920" offheight="1080" fovy="45"/>
+    <quality shadowsize="4096" offsamples="8"/>
+    <rgba haze="0.05 0.05 0.05 1"/>          <!-- near-black background haze, like an abdominal cavity -->
+    <map znear="0.001" zfar="10"/>
+  </visual>
+
+  <!-- ── Materials ───────────────────────────────────────────────────────── -->
+  <asset>
+    <!-- Cavity floor / working surface — dark pinkish tissue-like -->
+    <material name="tissue" rgba="0.72 0.42 0.38 1" shininess="0.1" specular="0.05" reflectance="0.0"/>
+    <!-- Cavity walls — darker, more muted -->
+    <material name="cavity_wall" rgba="0.45 0.28 0.25 1" shininess="0.05" specular="0.02" reflectance="0.0"/>
+    <!-- Trocar/port rim — surgical steel -->
+    <material name="steel" rgba="0.75 0.75 0.78 1" shininess="0.8" specular="0.7" reflectance="0.3"/>
+    <!-- Target object — bright marker peg, something to manipulate -->
+    <material name="peg" rgba="0.15 0.65 0.85 1" shininess="0.4" specular="0.3"/>
+
+    <!-- Tool meshes (your originals, untouched) -->
+    <mesh name="tool_main_insert_Shape_IndexedFaceSet.030"   file="tool_main_insert_Shape_IndexedFaceSet.030.obj"/>
+    <mesh name="tool_roll_link_Shape_IndexedFaceSet"          file="tool_roll_link_Shape_IndexedFaceSet.obj"/>
+    <mesh name="tool_pitch_link_Shape_IndexedFaceSet.014"    file="tool_pitch_link_Shape_IndexedFaceSet.014.obj"/>
+    <mesh name="tool_yaw_link_Shape_IndexedFaceSet.015"      file="tool_yaw_link_Shape_IndexedFaceSet.015.obj"/>
+    <mesh name="gripper_left_Shape_IndexedFaceSet.006"       file="gripper_left_Shape_IndexedFaceSet.006.obj"/>
+    <mesh name="gripper_right_Shape_IndexedFaceSet.022"      file="gripper_right_Shape_IndexedFaceSet.022.obj"/>
+  </asset>
+
+  <worldbody>
+
+    <!-- ── Lighting ────────────────────────────────────────────────────────
+         Real laparoscopes carry their own light source at the tip, so the
+         scene is lit from below-camera (a bright surgical-white spot aimed
+         at the working surface) plus a weak ambient fill.  No sunlight.
+    ──────────────────────────────────────────────────────────────────────── -->
+
+    <!-- Primary: laparoscope light — positioned just above the working area,
+         aimed straight down, simulates the scope's LED illuminator -->
+    <light name="scope_light"
+           pos="0 0 0.35"
+           dir="0 0 -1"
+           diffuse="0.95 0.92 0.88"
+           specular="0.4 0.38 0.35"
+           ambient="0 0 0"
+           castshadow="true"
+           cutoff="35"
+           exponent="3"/>
+
+    <!-- Secondary: slight left fill, to give tool shafts some dimensionality -->
+    <light name="fill_left"
+           pos="-0.3 0.1 0.4"
+           dir="0.4 -0.1 -1"
+           diffuse="0.25 0.22 0.20"
+           specular="0.05 0.05 0.05"
+           ambient="0 0 0"
+           castshadow="false"/>
+
+    <!-- Weak ambient — deep cavity darkness, not a studio -->
+    <light name="ambient_fill"
+           pos="0 0 1"
+           dir="0 0 -1"
+           diffuse="0.08 0.06 0.06"
+           specular="0 0 0"
+           ambient="0.04 0.03 0.03"
+           castshadow="false"/>
+
+    <!-- ── Laparoscopic cavity environment ─────────────────────────────────
+         A shallow box representing the simulated abdominal cavity — working
+         surface (floor) + 4 walls, all with tissue material.
+         The cavity is 40cm wide × 30cm deep × 12cm tall (~real box trainer).
+    ──────────────────────────────────────────────────────────────────────── -->
+
+    <!-- Working surface — slightly textured pinkish tissue floor -->
+    <geom name="cavity_floor"
+          type="box" size="0.20 0.15 0.005"
+          pos="0 0 -0.005"
+          material="tissue"
+          contype="1" conaffinity="1"/>
+
+    <!-- Back wall -->
+    <geom name="wall_back"  type="box" size="0.20 0.005 0.06" pos="0  0.155 0.06"  material="cavity_wall" contype="0" conaffinity="0"/>
+    <!-- Front wall -->
+    <geom name="wall_front" type="box" size="0.20 0.005 0.06" pos="0 -0.155 0.06"  material="cavity_wall" contype="0" conaffinity="0"/>
+    <!-- Left wall -->
+    <geom name="wall_left"  type="box" size="0.005 0.15 0.06" pos="-0.205 0 0.06"  material="cavity_wall" contype="0" conaffinity="0"/>
+    <!-- Right wall -->
+    <geom name="wall_right" type="box" size="0.005 0.15 0.06" pos=" 0.205 0 0.06"  material="cavity_wall" contype="0" conaffinity="0"/>
+
+    <!-- ── Trocar/port rings where tools enter ─────────────────────────────
+         Two ports at 45° on each side, simulating the angled entry of
+         laparoscopic instruments through the abdominal wall.
+         These are purely visual (contype=0), cosmetic props.
+    ──────────────────────────────────────────────────────────────────────── -->
+    <geom name="trocar_left"
+          type="cylinder" size="0.012 0.008"
+          pos="-0.12 0 0.12"
+          quat="0.924 0 -0.383 0" 
+          material="steel"
+          contype="0" conaffinity="0"/>
+
+    <geom name="trocar_right"
+          type="cylinder" size="0.012 0.008"
+          pos=" 0.12 0 0.12"
+          quat="0.924 0  0.383 0" 
+          material="steel"
+          contype="0" conaffinity="0"/>
+
+    <!-- Central trocar — laparoscope camera port -->
+    <geom name="trocar_scope"
+          type="cylinder" size="0.015 0.008"
+          pos="0 -0.10 0.13"
+          quat="0.906 0.423 0 0"  
+          material="steel"
+          contype="0" conaffinity="0"/>
+
+    <!-- ── Training target — a peg to manipulate ───────────────────────────
+         A small coloured cylinder sitting on the floor, the thing both tools
+         are working on together (standard peg-transfer task).
+    ──────────────────────────────────────────────────────────────────────── -->
+    <body name="target_peg" pos="0 0.04 0.02">
+      <joint type="free"/>
+      <geom type="cylinder" size="0.006 0.018" material="peg"
+            contype="1" conaffinity="1"/>
+      <!-- small ring sitting on top of peg, adds visual interest -->
+      <geom type="cylinder" size="0.010 0.003" pos="0 0 0.020" rgba="0.9 0.7 0.1 1"
+            contype="1" conaffinity="1"/>
+    </body>
+
+    <!-- ── Tool 1 (LEFT) — your original dvrk tool ─────────────────────────
+         Enters from the left trocar at 45° — pos shifted left and up,
+         angled inward.
+    ──────────────────────────────────────────────────────────────────────── -->
+    <body name="tool1_root"
+          pos="-0.12 0 0.12"
+          quat="0.924 0 -0.383 0">   <!-- 45° tilt toward center -->
+
+      <body name="tool_main_insert_Shape_IndexedFaceSet.030"
+            pos="0.0 0.0 0.0"
+            quat="0.7071068286895752 0.7071067690849304 0.0 0.0">
+        <geom type="mesh" name="tool_main_insert_left geom"
+              mesh="tool_main_insert_Shape_IndexedFaceSet.030"
+              rgba="0.85 0.85 0.88 1"/>   <!-- steel grey, not red -->
+
+        <body name="tool_roll_link_left"
+              pos="0.46589118242263794 1.6298145055770874e-08 1.629087265087037e-08"
+              quat="0.7071068286895752 -2.6692537957728746e-08 0.7071067690849304 2.6692536181371906e-08">
+          <joint name="joint_roll_left" type="hinge" axis="0 0 1" range="-180 180"/>
+          <geom type="mesh" mesh="tool_roll_link_Shape_IndexedFaceSet" rgba="1 1 1 1"/>
+
+          <body name="tool_pitch_link_left"
+                pos="1.7763568394002505e-15 3.552713678800501e-15 0.0"
+                quat="0.5000000596046448 -0.5 -0.5 -0.4999999701976776">
+            <joint name="joint_pitch_left" type="hinge" axis="0 0 1" range="-90 90"/>
+            <geom type="mesh" mesh="tool_pitch_link_Shape_IndexedFaceSet.014" rgba="1 1 1 1"/>
+
+            <body name="tool_yaw_link_left"
+                  pos="0.008991986513137817 -1.2500141565396916e-05 -2.426503442620742e-12"
+                  quat="0.7071068286895752 0.7071067690849304 0 0">
+              <geom type="mesh" mesh="tool_yaw_link_Shape_IndexedFaceSet.015" rgba="1 1 1 1"/>
+
+              <body name="gripper_left_left" pos="0 0 0"
+                    quat="0.70710688829422 6.693662195567584e-15 5.3385061704602776e-08 -0.7071066498756409">
+                <joint name="joint_gripper_left_left" type="hinge" axis="0 0 1" range="0 60"/>
+                <geom type="mesh" mesh="gripper_left_Shape_IndexedFaceSet.006" rgba="1 1 1 1"/>
+              </body>
+
+              <body name="gripper_right_left" pos="0 0 0"
+                    quat="0.70710688829422 6.693662195567584e-15 5.3385061704602776e-08 -0.7071066498756409">
+                <joint name="joint_gripper_right_left" type="hinge" axis="0 0 -1" range="0 60"/>
+                <geom type="mesh" mesh="gripper_right_Shape_IndexedFaceSet.022" rgba="1 1 1 1"/>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+
+    <!-- ── Tool 2 (RIGHT) — mirror of tool 1 ──────────────────────────────
+         Enters from the right trocar, mirrored angle.
+    ──────────────────────────────────────────────────────────────────────── -->
+    <body name="tool2_root"
+          pos="0.12 0 0.12"
+          quat="0.924 0 0.383 0">   <!-- 45° tilt toward center, mirrored -->
+
+      <body name="tool_main_insert_Shape_IndexedFaceSet.030_right"
+            pos="0.0 0.0 0.0"
+            quat="0.7071068286895752 0.7071067690849304 0.0 0.0">
+        <geom type="mesh" name="tool_main_insert_right geom"
+              mesh="tool_main_insert_Shape_IndexedFaceSet.030"
+              rgba="0.85 0.85 0.88 1"/>
+
+        <body name="tool_roll_link_right"
+              pos="0.46589118242263794 1.6298145055770874e-08 1.629087265087037e-08"
+              quat="0.7071068286895752 -2.6692537957728746e-08 0.7071067690849304 2.6692536181371906e-08">
+          <joint name="joint_roll_right" type="hinge" axis="0 0 1" range="-180 180"/>
+          <geom type="mesh" mesh="tool_roll_link_Shape_IndexedFaceSet" rgba="1 1 1 1"/>
+
+          <body name="tool_pitch_link_right"
+                pos="1.7763568394002505e-15 3.552713678800501e-15 0.0"
+                quat="0.5000000596046448 -0.5 -0.5 -0.4999999701976776">
+            <joint name="joint_pitch_right" type="hinge" axis="0 0 1" range="-90 90"/>
+            <geom type="mesh" mesh="tool_pitch_link_Shape_IndexedFaceSet.014" rgba="1 1 1 1"/>
+
+            <body name="tool_yaw_link_right"
+                  pos="0.008991986513137817 -1.2500141565396916e-05 -2.426503442620742e-12"
+                  quat="0.7071068286895752 0.7071067690849304 0 0">
+              <geom type="mesh" mesh="tool_yaw_link_Shape_IndexedFaceSet.015" rgba="1 1 1 1"/>
+
+              <body name="gripper_left_right" pos="0 0 0"
+                    quat="0.70710688829422 6.693662195567584e-15 5.3385061704602776e-08 -0.7071066498756409">
+                <joint name="joint_gripper_left_right" type="hinge" axis="0 0 1" range="0 60"/>
+                <geom type="mesh" mesh="gripper_left_Shape_IndexedFaceSet.006" rgba="1 1 1 1"/>
+              </body>
+
+              <body name="gripper_right_right" pos="0 0 0"
+                    quat="0.70710688829422 6.693662195567584e-15 5.3385061704602776e-08 -0.7071066498756409">
+                <joint name="joint_gripper_right_right" type="hinge" axis="0 0 -1" range="0 60"/>
+                <geom type="mesh" mesh="gripper_right_Shape_IndexedFaceSet.022" rgba="1 1 1 1"/>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+
+    <!-- ── Camera ──────────────────────────────────────────────────────────
+         Fixed laparoscope-style camera: positioned above and slightly behind
+         center, looking down at ~45° at the working surface — exactly the
+         angle a 0° laparoscope produces when the scope enters from a superior
+         port. Named so it can be switched to from Python.
+    ──────────────────────────────────────────────────────────────────────── -->
+    <camera name="laparoscope"
+            pos="0 -0.18 0.22"
+            xyaxes="1 0 0  0 0.707 0.707"
+            fovy="55"/>
+
+    <!-- Wide overview for debugging — top-down slightly off-angle -->
+    <camera name="overview"
+            pos="0 -0.35 0.45"
+            xyaxes="1 0 0  0 0.6 0.8"
+            fovy="60"/>
+
+  </worldbody>
+
+  <!-- ── Actuators — one set per tool ────────────────────────────────────── -->
+  <actuator>
+    <!-- Tool 1 (left) -->
+    <position name="act_roll_left"          joint="joint_roll_left"          kp="100" damping="1"/>
+    <position name="act_pitch_left"         joint="joint_pitch_left"         kp="100" damping="1"/>
+    <position name="act_gripper_left_left"  joint="joint_gripper_left_left"  kp="5"   damping="0.5"/>
+    <position name="act_gripper_right_left" joint="joint_gripper_right_left" kp="5"   damping="0.5"/>
+
+    <!-- Tool 2 (right) -->
+    <position name="act_roll_right"          joint="joint_roll_right"          kp="100" damping="1"/>
+    <position name="act_pitch_right"         joint="joint_pitch_right"         kp="100" damping="1"/>
+    <position name="act_gripper_left_right"  joint="joint_gripper_left_right"  kp="5"   damping="0.5"/>
+    <position name="act_gripper_right_right" joint="joint_gripper_right_right" kp="5"   damping="0.5"/>
+  </actuator>
+
+  <!-- ── Contact exclusions ──────────────────────────────────────────────── -->
+  <contact>
+    <!-- Within tool 1 -->
+    <exclude body1="tool_main_insert_Shape_IndexedFaceSet.030"       body2="tool_roll_link_left"/>
+    <!-- Within tool 2 -->
+    <exclude body1="tool_main_insert_Shape_IndexedFaceSet.030_right" body2="tool_roll_link_right"/>
+    <!-- Tool-to-tool shaft (they may cross each other) -->
+    <exclude body1="tool_main_insert_Shape_IndexedFaceSet.030"       body2="tool_main_insert_Shape_IndexedFaceSet.030_right"/>
+  </contact>
+
+</mujoco>

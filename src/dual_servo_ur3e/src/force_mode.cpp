@@ -112,14 +112,11 @@ g_my_robot = std::make_unique<ExampleRobotWrapper>(robot_ip, OUTPUT_RECIPE, INPU
 
   while (time_done < timeout || second_to_run.count() == 0)
   {
-    double t = std::chrono::duration<double>(std::chrono::steady_clock::now() - test_start).count();
-    double fz = -2.0 + std::sin(t * 2.0 * M_PI);
-
     auto call_start = std::chrono::steady_clock::now();
     bool success = g_my_robot->getUrDriver()->startForceMode(
         { 0, 0, 0, 0, 0, 0 },
         { 1, 1, 1, 1, 1, 1 },
-        { 0, 0, -fz, 0, 0, 0 },
+        { 0, 0, 0, 0, 0, 0 },
         2,
         { 0.1, 0.1, 1.5, 3.14, 3.14, 0.5 },
         0.005,
