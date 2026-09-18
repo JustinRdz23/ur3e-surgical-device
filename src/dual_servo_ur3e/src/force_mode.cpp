@@ -37,14 +37,14 @@
 #include "ur_client_library/control/reverse_interface.h"
 
 using namespace urcl;
-const std::string DEFAULT_ROBOT_IP = "192.168.56.101";
+const std::string DEFAULT_ROBOT_IP = "192.168.0.20";
 
 // const std::string PACKAGE_SHARE = ament_index_cpp::get_package_share_directory("dual_servo_ur3e");
 
 // const std::string SCRIPT_FILE = PACKAGE_SHARE + "/resources/external_control.urscript";
-const std::string OUTPUT_RECIPE = "examples/resources/rtde_output_recipe.txt";
-const std::string INPUT_RECIPE = "examples/resources/rtde_input_recipe.txt";
-
+const std::string SCRIPT_FILE = "/home/justinrc/workspace/src/dual_servo_ur3e/resources/external_control.urscript";
+const std::string OUTPUT_RECIPE = "/home/justinrc/workspace/src/dual_servo_ur3e/resources/rtde_output_recipe.txt";
+const std::string INPUT_RECIPE = "/home/justinrc/workspace/src/dual_servo_ur3e/resources/rtde_input_recipe_force_mode.txt";
 const std::string CALIBRATION_CHECKSUM = "calib_12788084448423163542";
 
 std::unique_ptr<ExampleRobotWrapper> g_my_robot;
@@ -77,8 +77,8 @@ int main(int argc, char* argv[])
   }
 
   bool headless_mode = true;
-  g_my_robot = std::make_unique<ExampleRobotWrapper>(robot_ip, OUTPUT_RECIPE, INPUT_RECIPE, headless_mode,
-                                                     "external_control.urp");
+g_my_robot = std::make_unique<ExampleRobotWrapper>(robot_ip, OUTPUT_RECIPE, INPUT_RECIPE, headless_mode,
+                                                     "external_control.urp", SCRIPT_FILE);                                                     
 
   if (!g_my_robot->isHealthy())
   {
@@ -119,7 +119,7 @@ int main(int argc, char* argv[])
     bool success = g_my_robot->getUrDriver()->startForceMode(
         { 0, 0, 0, 0, 0, 0 },
         { 1, 1, 1, 1, 1, 1 },
-        { 0, fz, 0, 0, 0, 0 },
+        { 0, 0, -fz, 0, 0, 0 },
         2,
         { 0.1, 0.1, 1.5, 3.14, 3.14, 0.5 },
         0.005,
