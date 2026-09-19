@@ -9,3 +9,17 @@ ros_ur_driver/
 # one-off debug artifacts
 frames_*.gv
 frames_*.pdf
+
+#General -----8841 changes on tree beacuse omitting:
+.venv/
+
+# Unity files
+/unity-slave-sim/Library/
+/unity-slave-sim/Logs/
+/unity-slave-sim/Temp/
+/unity-slave-sim/obj/
+/unity-slave-sim/Build/
+*.exe
+*.app
+*.dmg
+
