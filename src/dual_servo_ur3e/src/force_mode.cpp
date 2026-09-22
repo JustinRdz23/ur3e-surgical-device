@@ -119,7 +119,7 @@ g_my_robot = std::make_unique<ExampleRobotWrapper>(robot_ip, OUTPUT_RECIPE, INPU
         { 0, 0, 0, 0, 0, 0 },
         2,
         { 0.1, 0.1, 1.5, 3.14, 3.14, 0.5 },
-        0.005,
+        0.004,
         1.0
     );
     auto call_end = std::chrono::steady_clock::now();

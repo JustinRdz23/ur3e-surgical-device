@@ -47,7 +47,7 @@
 
 using namespace urcl;
 const std::string SCRIPT_FILE = "/home/justinrc/workspace/src/dual_servo_ur3e/resources/external_control.urscript";
-const std::string DEFAULT_ROBOT_IP = "192.168.0.20";
+const std::string DEFAULT_ROBOT_IP = "192.168.0.3";
 const std::string OUTPUT_RECIPE = "/home/justinrc/workspace/src/dual_servo_ur3e/resources/rtde_output_recipe.txt";
 const std::string INPUT_RECIPE = "/home/justinrc/workspace/src/dual_servo_ur3e/resources/rtde_input_recipe_force_mode.txt";
 

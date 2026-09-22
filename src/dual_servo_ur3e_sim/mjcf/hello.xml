@@ -1,12 +1,23 @@
 <mujoco model="dvrk_large_needle_driver">
   <compiler angle = "degree" meshdir="/home/justinrc/workspace/src/dual_servo_ur3e_sim/mesh/high_res"/>
+  <asset>
+      <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
+      <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+                 markrgb="0.8 0.8 0.8" width="300" height="300"/>
+      <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+  </asset>
   <worldbody>
     <light diffuse=".5 .5 .5" pos="0 0 10" dir="0 0 -1"/>
-    <geom type="plane" size="2 2 1" rgba="1 1 1 1" pos ="0 0 -0.02" />
+    <geom type="plane" size="2 2 1" material = "groundplane" pos ="0 0 -0.02" />
+
+    <body name="box" pos="0.2 0.05 0.05">
+      <freejoint/>
+      <geom type="box" name="box_geom" size="0.03 0.03 0.03" rgba="0.8 0.2 0.2 1" mass="0.2"/>
+    </body>
 
     <body name="tool_main_insert_Shape_IndexedFaceSet.030" pos="0.0 0.0 0.0" quat="0.7071068286895752 0.7071067690849304 0.0 0.0">
       <geom type="mesh" name="tool_main_insert_Shape_IndexedFaceSet.030 geom" mesh="tool_main_insert_Shape_IndexedFaceSet.030" rgba="255.0 1.0 1.0 1.0"/>
-      
+      <freejoint/>
       <body name="tool_roll_link_Shape_IndexedFaceSet" pos="0.46589118242263794 1.6298145055770874e-08 1.629087265087037e-08" quat="0.7071068286895752 -2.6692537957728746e-08 0.7071067690849304 2.6692536181371906e-08">
         <joint name="joint_roll" type="hinge" axis="0 0 1" range="-3.14159 3.14159"/>
         <geom type="mesh" name="tool_roll_link_Shape_IndexedFaceSet geom" mesh="tool_roll_link_Shape_IndexedFaceSet" rgba="1.0 1.0 1.0 1.0"/>
@@ -32,6 +43,11 @@
         </body>
       </body>
     </body>
+    <body mocap="true" name="mocap" pos="0.1 0.1 0.1">
+          <site pos="0 0 0.075" size="0.003 0.003 0.1" type="box" name="mocap_left_site1" rgba="0 0 1 1"/>
+          <site pos="0 0.075 0" size="0.003 0.1 0.003" type="box" name="mocap_left_site2" rgba="0 1 0 1"/>
+          <site pos="0.075 0 0" size="0.1 0.003 0.003" type="box" name="mocap_left_site3" rgba="1 0 0 1"/>
+    </body>
   </worldbody>
 
   <asset>
@@ -55,4 +71,7 @@
     <exclude body1= "tool_main_insert_Shape_IndexedFaceSet.030" body2="tool_roll_link_Shape_IndexedFaceSet"/>
   </contact>
 
+  <equality>
+    <weld body1="mocap" body2="tool_main_insert_Shape_IndexedFaceSet.030" relpose="0 0 0 1 0 0 0" solref="0.01 1" solimp="0.9 0.95 0.001"/>
+  </equality>
 </mujoco>
