@@ -30,8 +30,11 @@
 // POSSIBILITY OF SUCH DAMAGE.
 // -- END LICENSE BLOCK ------------------------------------------------
 
-// In a real-world example it would be better to get those values from command line parameters / a
-// better configuration system such as Boost.Program_options
+// Usage:
+//   ros2 run dual_servo_ur3e freedrive_mode ur3e        # -> 192.168.0.3
+//   ros2 run dual_servo_ur3e freedrive_mode ur3         # -> 192.168.0.1
+//   ros2 run dual_servo_ur3e freedrive_mode 192.168.0.5 # raw IP still works
+//   ros2 run dual_servo_ur3e freedrive_mode ur3e 30     # optional seconds-to-run as 2nd arg
 
 #include <ur_client_library/ur/dashboard_client.h>
 #include <ur_client_library/ur/ur_driver.h>
@@ -41,16 +44,22 @@
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <thread>
 #include "ur_client_library/control/reverse_interface.h"
 
 using namespace urcl;
 const std::string SCRIPT_FILE = "/home/justinrc/workspace/src/dual_servo_ur3e/resources/external_control.urscript";
-const std::string DEFAULT_ROBOT_IP = "192.168.0.3";
 const std::string OUTPUT_RECIPE = "/home/justinrc/workspace/src/dual_servo_ur3e/resources/rtde_output_recipe.txt";
 const std::string INPUT_RECIPE = "/home/justinrc/workspace/src/dual_servo_ur3e/resources/rtde_input_recipe_force_mode.txt";
 
+// Known robots, by label.
+const std::map<std::string, std::string> KNOWN_ROBOTS = {
+  { "ur3e", "192.168.0.3" },
+  { "ur3",  "192.168.0.1" },
+};
+const std::string DEFAULT_ROBOT_IP = KNOWN_ROBOTS.at("ur3e");
 
 std::unique_ptr<ExampleRobotWrapper> g_my_robot;
 
@@ -64,26 +73,38 @@ void sendFreedriveMessageOrDie(const control::FreedriveControlMessage freedrive_
   }
 }
 
+
+std::string resolveRobotIp(const std::string& arg)
+{
+  auto it = KNOWN_ROBOTS.find(arg);
+  if (it != KNOWN_ROBOTS.end())
+  {
+    return it->second;
+  }
+  return arg;
+}
+
 int main(int argc, char* argv[])
 {
   urcl::setLogLevel(urcl::LogLevel::INFO);
-  // Parse the ip arguments if given
+
   std::string robot_ip = DEFAULT_ROBOT_IP;
   if (argc > 1)
   {
-    robot_ip = std::string(argv[1]);
+    robot_ip = resolveRobotIp(std::string(argv[1]));
   }
 
-  // Parse how many seconds to run
   auto second_to_run = std::chrono::seconds(0);
   if (argc > 2)
   {
     second_to_run = std::chrono::seconds(std::stoi(argv[2]));
   }
 
+  URCL_LOG_INFO("Connecting to robot at %s", robot_ip.c_str());
+
   bool headless_mode = true;
-g_my_robot = std::make_unique<ExampleRobotWrapper>(robot_ip, OUTPUT_RECIPE, INPUT_RECIPE, headless_mode,
-                                                     "external_control.urp", SCRIPT_FILE); 
+  g_my_robot = std::make_unique<ExampleRobotWrapper>(robot_ip, OUTPUT_RECIPE, INPUT_RECIPE, headless_mode,
+                                                       "external_control.urp", SCRIPT_FILE);
   if (!g_my_robot->isHealthy())
   {
     URCL_LOG_ERROR("Something in the robot initialization went wrong. Exiting. Please check the output above.");
