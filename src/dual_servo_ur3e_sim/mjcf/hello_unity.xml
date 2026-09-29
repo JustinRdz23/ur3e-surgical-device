@@ -20,7 +20,6 @@
           <geom type="mesh" name="tool_pitch_link_Shape_IndexedFaceSet.014 geom" mesh="tool_pitch_link_Shape_IndexedFaceSet.014" rgba="1.0 1.0 1.0 1.0"/>
 
           <body name="tool_yaw_link_Shape_IndexedFaceSet.015" pos="0.008991986513137817 -1.2500141565396916e-05 -2.426503442620742e-12" quat="0.7071068286895752 0.7071067690849304 -4.969171724626556e-16 -4.492481823441478e-22">
-            <!-- <joint name="joint_yaw" type="hinge" axis="0 0 1" range="-1.39626 1.39626"/> -->
             <geom type="mesh" name="tool_yaw_link_Shape_IndexedFaceSet.015 geom" mesh="tool_yaw_link_Shape_IndexedFaceSet.015" rgba="1.0 1.0 1.0 1.0"/>
 
             <body name="gripper_left_Shape_IndexedFaceSet.006" pos="0.0 0.0 0.0" quat="0.70710688829422 6.693662195567584e-15 5.3385061704602776e-08 -0.7071066498756409">
@@ -50,14 +49,12 @@
   <actuator>
     <position name="act_roll" joint="joint_roll" kp="100" ctrlrange="-3.14159 3.14159"/>
     <position name="act_pitch" joint="joint_pitch" kp="100" ctrlrange="-1.5708 1.5708"/>
-    <!-- <position name="act_yaw" joint="joint_yaw" kp="10" damping="1"/> -->
     <position name="act_gripper_left" joint="joint_gripper_left" kp="5" ctrlrange="0 1.0472"/>
     <position name="act_gripper_right" joint="joint_gripper_right" kp="5" ctrlrange="0 1.0472"/>
   </actuator>
 
   <contact>
     <exclude body1="tool_main_insert_Shape_IndexedFaceSet.030" body2="tool_roll_link_Shape_IndexedFaceSet"/>
-    <!-- las mandibulas cerradas se traslapan ~1.8 mm en la malla: se excluye el contacto entre ellas -->
     <exclude body1="gripper_left_Shape_IndexedFaceSet.006" body2="gripper_right_Shape_IndexedFaceSet.022"/>
   </contact>
 

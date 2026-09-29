@@ -1,22 +1,3 @@
-// MujocoBridge.cs — Unity (lado visual) · v3 (auto-calibración sobre prefab existente)
-// La pinza simulada es ESCLAVA del UR3e real. Unity no calcula movimiento:
-// solo manda BOTONES y aplica las poses que calcula MuJoCo.
-//
-//   Espacio (mantener) = clutch   ·   E / D (mantener) = abrir / cerrar pinza   ·   R = reset
-//
-// Setup:
-//  1. Agrega este script al GameObject raíz de la herramienta (p.ej. "DvrkTool").
-//  2. Las piezas se buscan por nombre EN CUALQUIER NIVEL de su jerarquía:
-//     vale el nombre completo del <body> MuJoCo o solo la parte antes de "_Shape"
-//     (tool_main_insert, tool_roll_link, tool_pitch_link, tool_yaw_link,
-//      gripper_left, gripper_right). La consola dice cuáles encontró.
-//  3. Auto-calibración: la pose que tenga el prefab al dar Play se toma como q = 0
-//     de MuJoCo. No importa cómo estén orientadas/escaladas tus mallas.
-//     (Clic derecho en el componente → "Recalibrar" si hace falta.)
-//  4. Package Manager: com.unity.nuget.newtonsoft-json.
-//  5. Play + `python3 mujoco_unity_bridge.py --model hello_unity.xml --demo`
-//     (o --arm justi con el UR3e / URSim).
-
 using System.Collections.Generic;
 using System.Globalization;
 using System.Net;
@@ -29,8 +10,8 @@ using UnityEngine;
 public class MujocoBridge : MonoBehaviour
 {
     [Header("Red")]
-    public int statePort = 5005;   // MuJoCo -> Unity
-    public int cmdPort = 5006;     // Unity -> MuJoCo (solo botones)
+    public int statePort = 5005;
+    public int cmdPort = 5006;
     public string pythonHost = "127.0.0.1";
 
     [Header("Botones")]
@@ -40,7 +21,7 @@ public class MujocoBridge : MonoBehaviour
     public KeyCode resetKey = KeyCode.R;
 
     [Header("Indicador visual (opcional)")]
-    public Renderer[] highlightRenderers;          // p.ej. mandíbulas
+    public Renderer[] highlightRenderers;
     public Color okColor = new Color(0.2f, 0.8f, 0.3f);
     public Color warnColor = new Color(1f, 0.75f, 0.1f);
     public Color badColor = new Color(0.9f, 0.15f, 0.15f);
@@ -63,11 +44,11 @@ public class MujocoBridge : MonoBehaviour
     class Link
     {
         public Transform t;
-        public Vector3 restPos;   public Quaternion restRot;   // pose Unity en q=0 (marco del root)
-        public Vector3 offPos;    public Quaternion offRot;    // offset MuJoCo->Unity
+        public Vector3 restPos;   public Quaternion restRot;
+        public Vector3 offPos;    public Quaternion offRot;
     }
-    readonly Dictionary<string, Link> links = new Dictionary<string, Link>();   // clave = nombre body MuJoCo
-    readonly List<string> order = new List<string>();                          // orden padre->hijo de MuJoCo
+    readonly Dictionary<string, Link> links = new Dictionary<string, Link>();
+    readonly List<string> order = new List<string>();
     bool bound;
 
     void Start()
@@ -110,7 +91,6 @@ public class MujocoBridge : MonoBehaviour
 
     static string B(bool v) => v ? "true" : "false";
 
-    // --- enlazar bodies MuJoCo con transforms del prefab por nombre ---
     static string ShortName(string n)
     {
         int i = n.IndexOf("_Shape");
@@ -139,7 +119,6 @@ public class MujocoBridge : MonoBehaviour
             Debug.LogWarning("[MujocoBridge] sin pieza en el prefab (no se moverán): " + string.Join(", ", missing));
     }
 
-    // pose relativa al root
     Vector3 LocalPos(Transform t) => transform.InverseTransformPoint(t.position);
     Quaternion LocalRot(Transform t) => Quaternion.Inverse(transform.rotation) * t.rotation;
 
@@ -163,7 +142,7 @@ public class MujocoBridge : MonoBehaviour
     void Recalibrate()
     {
         foreach (var L in links.Values)
-        {   // regresar a la pose de reposo y volver a calibrar con el siguiente paquete
+        {
             if (!calibrated) break;
             L.t.position = transform.TransformPoint(L.restPos);
             L.t.rotation = transform.rotation * L.restRot;
@@ -203,7 +182,6 @@ public class MujocoBridge : MonoBehaviour
         if (!bound) Bind(bodiesJson);
         if (!calibrated) Calibrate(bodiesJson);
 
-        // padre -> hijo, en poses de mundo: pose_unity = pose_mujoco * offset
         foreach (var name in order)
         {
             if (!links.TryGetValue(name, out Link L)) continue;
@@ -216,8 +194,6 @@ public class MujocoBridge : MonoBehaviour
         UpdateHighlight();
     }
 
-    // Azul = clutch / sin robot. Si no: peor de (singularidades del UR3e maestro,
-    // margen de pitch de la herramienta, fuerza en mandíbulas).
     void UpdateHighlight()
     {
         if (highlightRenderers == null) return;
@@ -233,8 +209,8 @@ public class MujocoBridge : MonoBehaviour
         {
             if (r == null) continue;
             r.GetPropertyBlock(mpb);
-            mpb.SetColor("_BaseColor", c); // URP Lit
-            mpb.SetColor("_Color", c);     // Built-in
+            mpb.SetColor("_BaseColor", c);
+            mpb.SetColor("_Color", c);
             r.SetPropertyBlock(mpb);
         }
     }

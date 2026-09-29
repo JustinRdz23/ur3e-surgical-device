@@ -1,28 +1,3 @@
-#!/usr/bin/env python3
-"""
-Puente UR3e (maestro) -> MuJoCo (fisica) -> Unity (visual)  ·  v2
-
-El UR3e real, guiado a mano (force_mode como freedrive), es el MAESTRO.
-La pinza simulada es ESCLAVA de sus juntas. Unity no comanda el movimiento:
-solo manda BOTONES (clutch, abrir/cerrar pinza, reset) y dibuja lo que
-MuJoCo calcula.
-
-  UR3e --/joint_states (ROS2)--> este script --(qpos)--> MuJoCo
-  Unity --UDP 5006 {"buttons":...}--> este script      (solo botones)
-  este script --UDP 5005 estado JSON 60 Hz--> Unity
-
-Mapeo por defecto (brazo "justi"), incremental con clutch como en el paper:
-  roll  <- wrist_3   (girar la mano sobre el eje de la herramienta)
-  pitch <- wrist_2
-  pinza <- botones (el UR3e no tiene gripper; luego: pedal / entrada digital)
-
-  q_tool = q_tool_al_soltar_clutch + escala * (q_UR - q_UR_al_soltar_clutch)
-
-Uso:
-  ros2 launch ... (driver UR o URSim)   y luego
-  python3 mujoco_unity_bridge.py --model hello_unity.xml --arm justi
-  python3 mujoco_unity_bridge.py --model hello_unity.xml --demo   # sin robot: maestro sintetico
-"""
 import argparse
 import json
 import math
@@ -41,20 +16,17 @@ SEND_HZ = 60.0
 UR_JOINTS = ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
              "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
 
-# mapeo junta de herramienta -> junta del UR (sin prefijo), con escala
 DEFAULT_MAP = {"joint_roll": ("wrist_3_joint", 1.0),
                "joint_pitch": ("wrist_2_joint", 1.0)}
 
-JAW_SPEED = 1.5        # rad/s mientras se mantiene el boton
+JAW_SPEED = 1.5
 JAW_MAX = 1.0472
 
-# DH estandar UR3e (Universal Robots) — para singularidades del MAESTRO
 UR3E_DH = {"d": [0.15185, 0, 0, 0.13105, 0.08535, 0.0921],
            "a": [0, -0.24355, -0.2132, 0, 0, 0],
            "alpha": [math.pi / 2, 0, 0, math.pi / 2, -math.pi / 2, 0]}
 
 
-# ---------------- conversion de marcos MuJoCo -> Unity (verificada) ----------------
 def pos_to_unity(p):
     return [float(p[0]), float(p[2]), float(p[1])]
 
@@ -64,7 +36,6 @@ def quat_to_unity(q):
     return [float(-x), float(-z), float(-y), float(w)]
 
 
-# ---------------- singularidades del UR3e (lado maestro) ----------------
 def ur3e_fk_frames(q):
     T = np.eye(4)
     frames = [T.copy()]
@@ -93,23 +64,18 @@ def ur3e_jacobian(q):
 
 
 def ur3e_singularity(q):
-    """Indicadores 0..1 (1 = lejos). Las tres singularidades clasicas del UR:
-    muneca (q5≈0), codo (q3≈0, brazo extendido), hombro (centro de muneca
-    sobre el eje de J1). Mas la manipulabilidad normalizada."""
     wrist = abs(math.sin(q[4]))
     elbow = abs(math.sin(q[2]))
     F = ur3e_fk_frames(q)
-    wc = F[4][:3, 3]                       # aprox. centro de muneca
-    shoulder = min(1.0, math.hypot(wc[0], wc[1]) / 0.10)   # 10 cm = "sano"
+    wc = F[4][:3, 3]
+    shoulder = min(1.0, math.hypot(wc[0], wc[1]) / 0.10)
     J = ur3e_jacobian(q)
     s = np.linalg.svd(J, compute_uv=False)
     return {"wrist": wrist, "elbow": elbow, "shoulder": shoulder,
             "sigma_min": float(s[-1]), "cond": float(s[0] / max(s[-1], 1e-9))}
 
 
-# ---------------- fuentes de maestro ----------------
 class DemoMaster:
-    """Maestro sintetico para probar sin robot: mueve wrist_2/wrist_3."""
     def __init__(self):
         self.t0 = time.perf_counter()
 
@@ -125,7 +91,6 @@ class DemoMaster:
 
 
 class RosMaster:
-    """Lee /joint_states por NOMBRE (no por indice: el orden no esta garantizado)."""
     def __init__(self, arm, topic):
         import rclpy
         from rclpy.node import Node
@@ -155,7 +120,7 @@ class RosMaster:
 
     def joints(self):
         if time.perf_counter() - self.stamp > 0.5 or not all(j in self.q for j in UR_JOINTS):
-            return None                     # sin senal del robot -> esclavo se congela
+            return None
         return dict(self.q)
 
     def close(self):
@@ -163,13 +128,12 @@ class RosMaster:
         self.rclpy.shutdown()
 
 
-# ---------------- mapeo maestro -> esclavo con clutch ----------------
 class Teleop:
     def __init__(self, model, mapping):
         self.model = model
         self.map = mapping
-        self.act = {model.actuator(i).trnid[0]: i for i in range(model.nu)}   # joint id -> actuator
-        self.clutch = True          # arranca embragado: no salta al conectar
+        self.act = {model.actuator(i).trnid[0]: i for i in range(model.nu)}
+        self.clutch = True
         self.q_master_ref = None
         self.q_tool_ref = {}
         self.jaw = 0.0
@@ -178,7 +142,6 @@ class Teleop:
         return mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, name)
 
     def update(self, data, qm, buttons, dt):
-        # pinza por botones
         if buttons.get("jaw_open"):
             self.jaw = min(JAW_MAX, self.jaw + JAW_SPEED * dt)
         if buttons.get("jaw_close"):
@@ -192,7 +155,7 @@ class Teleop:
         if want_clutch:
             self.clutch = True
             return
-        if self.clutch:               # se solto el clutch: re-anclar referencias
+        if self.clutch:
             self.clutch = False
             self.q_master_ref = dict(qm)
             self.q_tool_ref = {tj: float(data.ctrl[self.act[self._jid(tj)]]) for tj in self.map
@@ -244,7 +207,7 @@ def main():
         while viewer is None or viewer.is_running():
             wall0 = time.perf_counter()
 
-            while True:                       # botones desde Unity
+            while True:
                 try:
                     msg = json.loads(rx.recvfrom(4096)[0].decode())
                     buttons = msg.get("buttons", buttons)

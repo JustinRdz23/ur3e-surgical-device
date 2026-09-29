@@ -5,8 +5,6 @@ using System.Xml;
 using UnityEditor;
 using UnityEngine;
 
-// Builds Assets/Prefabs/DvrkTool.prefab from Assets/Models/DVRK/dvrk_tool.xml (the MuJoCo MJCF),
-// converting MuJoCo (right-handed, Z-up) to Unity (left-handed, Y-up) with x,y,z -> x,z,y.
 public static class DvrkToolBuilder
 {
     const string ModelDir = "Assets/Models/DVRK";
@@ -14,7 +12,6 @@ public static class DvrkToolBuilder
     const string PrefabPath = "Assets/Prefabs/DvrkTool.prefab";
     const string MaterialPath = ModelDir + "/DvrkSteel.mat";
 
-    // Mesh child correction, set by DetectImporterFlipsX.
     static Quaternion meshRot;
     static Vector3 meshScale;
 
@@ -47,7 +44,6 @@ public static class DvrkToolBuilder
         go.transform.localPosition = ToUnity(ParseVec(body.GetAttribute("pos"), Vector3.zero));
         go.transform.localRotation = ToUnity(ParseQuat(body.GetAttribute("quat")));
 
-        // A hinge rotates the body itself, so the joint sits on the same transform.
         var joint = body.ChildNodes.OfType<XmlElement>().FirstOrDefault(e => e.Name == "joint");
         if (joint != null && joint.GetAttribute("type") == "hinge")
         {
@@ -79,9 +75,6 @@ public static class DvrkToolBuilder
             BuildBody(child, go.transform, meshFiles, material);
     }
 
-    // Unity's OBJ importer may or may not negate X on import. Compare the imported bounds with the
-    // raw vertices of an asymmetric mesh to find out, then pick the child transform that lands the
-    // mesh on x,z,y of the file's coordinates either way.
     static void DetectImporterFlipsX(string objFile)
     {
         var path = ModelDir + "/" + objFile;
@@ -100,13 +93,11 @@ public static class DvrkToolBuilder
 
         if (flipped || !same)
         {
-            // imported (-x,y,z) -> wanted (x,z,y): 180 degrees about (0,1,1)
             meshRot = Quaternion.AngleAxis(180f, new Vector3(0, 1, 1).normalized);
             meshScale = Vector3.one;
         }
         else
         {
-            // imported (x,y,z) -> wanted (x,z,y): mirror Z, then 90 degrees about X
             meshRot = Quaternion.AngleAxis(90f, Vector3.right);
             meshScale = new Vector3(1, 1, -1);
         }
@@ -130,7 +121,6 @@ public static class DvrkToolBuilder
         return new Vector3(p[0], p[1], p[2]);
     }
 
-    // MJCF quats are w x y z.
     static Quaternion ParseQuat(string s)
     {
         if (string.IsNullOrEmpty(s)) return Quaternion.identity;
