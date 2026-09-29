@@ -14,11 +14,17 @@ frames_*.pdf
 .venv/
 
 # Unity files
-/unity-slave-sim/Library/
-/unity-slave-sim/Logs/
-/unity-slave-sim/Temp/
-/unity-slave-sim/obj/
-/unity-slave-sim/Build/
+/unity-sim/UR3-medical-robot/Library/
+/unity-sim/UR3-medical-robot/Logs/
+/unity-sim/UR3-medical-robot/Temp/
+/unity-sim/UR3-medical-robot/obj/
+/unity-sim/UR3-medical-robot/Build/
+/unity-sim/UR3-medical-robot/Builds/
+/unity-sim/UR3-medical-robot/UserSettings/
+/unity-sim/UR3-medical-robot/MemoryCaptures/
+/unity-sim/UR3-medical-robot/*.csproj
+/unity-sim/UR3-medical-robot/*.sln
+/unity-sim/UR3-medical-robot/*.user
 *.exe
 *.app
 *.dmg
