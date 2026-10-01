@@ -17,8 +17,8 @@ class UR2MujocoBridge(Node):
         self.data = data
 
     def joint_state_callback(self, msg):
-        self.data.ctrl[0] = msg.position[0]
-
+        self.data.ctrl[0] = msg.position[11] #wrist joint enables rotation in roll axis for tool
+        self.data.ctrl[1] = msg.position[10] #wrist joint 2 enables rotation in yaw
 
 def main(args=None):
     model = mujoco.MjModel.from_xml_path("/home/justinrc/workspace/src/dual_servo_ur3e_sim/mjcf/hello.xml")
