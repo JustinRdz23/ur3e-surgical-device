@@ -464,8 +464,12 @@ public class MujocoBridge : MonoBehaviour
     {
         string estado = !connected ? "MuJoCo SIN SEÑAL (¿corre el .py?)" : !masterOk ? "UR3e SIN SEÑAL (esclavo congelado)"
                       : clutch ? "CLUTCH (reposiciona el UR3e)" : "Siguiendo al UR3e";
-        GUI.Label(new Rect(10, 10, 700, 140),
+        var kb = Keyboard.current;
+        string teclas = kb == null ? "SIN TECLADO (Input System)"
+            : $"clutch {(kb[clutchKey].isPressed ? "■" : "□")} · abrir {(kb[jawOpenKey].isPressed ? "■" : "□")} · cerrar {(kb[jawCloseKey].isPressed ? "■" : "□")}";
+        GUI.Label(new Rect(10, 10, 700, 160),
             $"{estado}   t={simTime:F2}s  piezas={links.Count}  contactos={contacts}\n" +
+            $"Teclas que ve Unity — {teclas}\n" +
             $"UR3e — muñeca {wristSing:F2} · codo {elbowSing:F2} · hombro {shoulderSing:F2}   (0 = singular)\n" +
             $"Herramienta — roll {toolQ[0] * Mathf.Rad2Deg:F1}° · pitch {toolQ[1] * Mathf.Rad2Deg:F1}° · " +
             $"dedos {toolQ[2] * Mathf.Rad2Deg:F1}°/{toolQ[3] * Mathf.Rad2Deg:F1}° · F mandíbula {jawForce:F2} N\n" +

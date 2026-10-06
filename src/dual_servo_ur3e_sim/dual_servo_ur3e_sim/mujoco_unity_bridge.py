@@ -93,8 +93,9 @@ class DemoMaster:
     def spin(self):
         pass
 
+    # jaw is left to the E/D keys, like with the real robot
     def jaw(self, t):
-        return max(0.0, 0.9 * math.sin(2 * math.pi * t / 8.0))
+        return None
 
     def joints(self, t):
         return {"shoulder_pan_joint": 0.0, "shoulder_lift_joint": -1.57,

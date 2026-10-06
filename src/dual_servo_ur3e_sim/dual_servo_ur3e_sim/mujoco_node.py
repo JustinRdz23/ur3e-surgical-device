@@ -21,7 +21,7 @@ class UR2MujocoBridge(Node):
         self.data.ctrl[1] = msg.position[10] #wrist joint 2 enables rotation in yaw
 
 def main(args=None):
-    model = mujoco.MjModel.from_xml_path("/home/justinrc/workspace/src/dual_servo_ur3e_sim/mjcf/hello.xml")
+    model = mujoco.MjModel.from_xml_path("/home/xpatricia-garcia/repos/medicalUR/ur3e-surgical-device/src/dual_servo_ur3e_sim/mjcf/hello.xml")
     data = mujoco.MjData(model)
     
     rclpy.init(args=args)

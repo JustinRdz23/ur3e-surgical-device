@@ -50,9 +50,9 @@
 #include "ur_client_library/control/reverse_interface.h"
 
 using namespace urcl;
-const std::string SCRIPT_FILE = "/home/justinrc/workspace/src/dual_servo_ur3e/resources/external_control.urscript";
-const std::string OUTPUT_RECIPE = "/home/justinrc/workspace/src/dual_servo_ur3e/resources/rtde_output_recipe.txt";
-const std::string INPUT_RECIPE = "/home/justinrc/workspace/src/dual_servo_ur3e/resources/rtde_input_recipe_force_mode.txt";
+const std::string SCRIPT_FILE = "/home/xpatricia-garcia/repos/medicalUR/ur3e-surgical-device/src/dual_servo_ur3e/resources/external_control.urscript";
+const std::string OUTPUT_RECIPE = "/home/xpatricia-garcia/repos/medicalUR/ur3e-surgical-device/src/dual_servo_ur3e/resources/rtde_output_recipe.txt";
+const std::string INPUT_RECIPE = "/home/xpatricia-garcia/repos/medicalUR/ur3e-surgical-device/src/dual_servo_ur3e/resources/rtde_input_recipe_force_mode.txt";
 
 // Known robots, by label.
 const std::map<std::string, std::string> KNOWN_ROBOTS = {

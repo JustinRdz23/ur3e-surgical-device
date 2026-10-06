@@ -205,8 +205,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 330585543}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.1966053, y: -0.3329002, z: 0.07118091, w: 0.9194875}
-  m_LocalPosition: {x: 0.06160897, y: 0.035000015, z: -0.060000017}
+  m_LocalRotation: {x: -0.08717227, y: 0.89959055, z: -0.21045263, w: -0.37262252}
+  m_LocalPosition: {x: 0.021543775, y: 0.0062529286, z: 0.008798231}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -419,7 +419,13 @@ MonoBehaviour:
   - {fileID: 0}
   - {fileID: 0}
   - {fileID: 0}
-  rotationSpeed: 0.05
+  axes:
+  - {x: 0, y: 1, z: 0}
+  - {x: 1, y: 0, z: 0}
+  - {x: 1, y: 0, z: 0}
+  - {x: 1, y: 0, z: 0}
+  - {x: 0, y: 1, z: 0}
+  - {x: 1, y: 0, z: 0}
 --- !u!4 &597095283
 Transform:
   m_ObjectHideFlags: 0
@@ -723,10 +729,10 @@ MonoBehaviour:
   statePort: 5005
   cmdPort: 5006
   pythonHost: 127.0.0.1
-  clutchKey: 32
-  jawOpenKey: 101
-  jawCloseKey: 100
-  resetKey: 114
+  clutchKey: 1
+  jawOpenKey: 19
+  jawCloseKey: 18
+  resetKey: 32
   objImporterFlipsX: 1
   highlightRenderers:
   - {fileID: 0}
@@ -738,6 +744,15 @@ MonoBehaviour:
   warnThreshold: 0.35
   badThreshold: 0.1
   jawForceLimitN: 5
+  showContacts: 1
+  markerSize: 0.0012
+  forceForMaxSize: 10
+  jawJawColor: {r: 0.1, g: 0.8, b: 1, a: 1}
+  jawObjectColor: {r: 1, g: 0.1, b: 0.6, a: 1}
+  otherContactColor: {r: 1, g: 0.9, b: 0.1, a: 1}
+  masterView: {fileID: 0}
+  logCsv: 1
+  logDir: 
   connected: 0
   masterOk: 0
   clutch: 0
@@ -748,6 +763,18 @@ MonoBehaviour:
   pitchMargin: 1
   jawForce: 0
   contacts: 0
+  lastSeq: 0
+  received: 0
+  lost: 0
+  stale: 0
+  outOfOrder: 0
+  latencyMs: 0
+  holdMs: 0
+  toolQ:
+  - 0
+  - 0
+  - 0
+  - 0
 --- !u!4 &1538351450 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 9222079244847053967, guid: 2d811c60416a54958bf4d98af8cdb08c, type: 3}

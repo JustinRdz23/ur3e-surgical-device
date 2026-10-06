@@ -42,9 +42,9 @@ const std::string DEFAULT_ROBOT_IP = "192.168.0.20";
 // const std::string PACKAGE_SHARE = ament_index_cpp::get_package_share_directory("dual_servo_ur3e");
 
 // const std::string SCRIPT_FILE = PACKAGE_SHARE + "/resources/external_control.urscript";
-const std::string SCRIPT_FILE = "/home/justinrc/workspace/src/dual_servo_ur3e/resources/external_control.urscript";
-const std::string OUTPUT_RECIPE = "/home/justinrc/workspace/src/dual_servo_ur3e/resources/rtde_output_recipe.txt";
-const std::string INPUT_RECIPE = "/home/justinrc/workspace/src/dual_servo_ur3e/resources/rtde_input_recipe_force_mode.txt";
+const std::string SCRIPT_FILE = "/home/xpatricia-garcia/repos/medicalUR/ur3e-surgical-device/src/dual_servo_ur3e/resources/external_control.urscript";
+const std::string OUTPUT_RECIPE = "/home/xpatricia-garcia/repos/medicalUR/ur3e-surgical-device/src/dual_servo_ur3e/resources/rtde_output_recipe.txt";
+const std::string INPUT_RECIPE = "/home/xpatricia-garcia/repos/medicalUR/ur3e-surgical-device/src/dual_servo_ur3e/resources/rtde_input_recipe_force_mode.txt";
 const std::string CALIBRATION_CHECKSUM = "calib_12788084448423163542";
 
 std::unique_ptr<ExampleRobotWrapper> g_my_robot;
