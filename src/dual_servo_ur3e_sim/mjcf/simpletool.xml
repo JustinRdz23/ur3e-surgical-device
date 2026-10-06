@@ -10,8 +10,8 @@
     <light diffuse=".5 .5 .5" pos="0 0 10" dir="0 0 -1"/>
     <geom type="plane" size="2 2 1" material = "groundplane" pos ="0 0 -0.02" />
 
-    <body name="box" pos="0 0.05 0.05">
-      <geom type="box" name="box_geom" size="0.03 0.03 0.03" rgba="0.8 0.2 0.2 1" mass="0.2"/>
+    <body name="box" pos="0 -0.2 0.1">
+      <geom type="box" name="box_geom" size="0.15 0.15 0.15" rgba="0.8 0.2 0.2 1" mass="0.2"/>
     </body>
 
     <body name="tool_main_insert_Shape_IndexedFaceSet.030" pos="0.0 0.0 0.0" quat="0.1 0.0 0.0 0.0">
@@ -73,4 +73,4 @@
   <equality>
     <weld body1="mocap" body2="tool_main_insert_Shape_IndexedFaceSet.030" relpose="0 0 0 0.70710678 0 0.70710678 0" solref="0.002 1" solimp="0.9 0.95 0.001 0.5 2"/>
   </equality>
-</mujoco>
+</mujoco> 

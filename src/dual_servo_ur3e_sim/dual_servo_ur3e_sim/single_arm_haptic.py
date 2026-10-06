@@ -10,7 +10,7 @@ import rtde_receive
 ROBOT_IP = "192.168.0.3" #UR3e
 # ROBOT_IP = "192.168.0.1"  #UR3
 
-MJCF_PATH = "/home/justinrc/workspace/src/dual_servo_ur3e_sim/mjcf/hello.xml"
+MJCF_PATH = "/home/justinrc/workspace/src/dual_servo_ur3e_sim/mjcf/simpletool.xml"
 
 TASK_FRAME = [0, 0, 0, 0, 0, 0] #Frame that will applied robot
 SELECTION_VECTOR = [1, 1, 1, 1, 1, 1]
@@ -74,6 +74,7 @@ def main():
     rtde_r = rtde_receive.RTDEReceiveInterface(ROBOT_IP)
     print("Connected.")
 
+    time.sleep(1.0)  
     rtde_c.zeroFtSensor()
     rtde_c.forceModeSetDamping(DAMPING)
     rtde_c.forceModeSetGainScaling(GAIN_SCALING)

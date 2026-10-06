@@ -1,0 +1,512 @@
+<mujoco model="dvrk_large_needle_driver">
+
+  <compiler
+    angle="degree"
+    meshdir="/home/justinrc/workspace/src/dual_servo_ur3e_sim/mesh/high_res"/>
+
+  <asset>
+
+    <texture
+      type="skybox"
+      builtin="gradient"
+      rgb1="0.3 0.5 0.7"
+      rgb2="0 0 0"
+      width="512"
+      height="3072"/>
+
+    <texture
+      type="2d"
+      name="groundplane"
+      builtin="checker"
+      mark="edge"
+      rgb1="0.2 0.3 0.4"
+      rgb2="0.1 0.2 0.3"
+      markrgb="0.8 0.8 0.8"
+      width="300"
+      height="300"/>
+
+    <material
+      name="groundplane"
+      texture="groundplane"
+      texuniform="true"
+      texrepeat="5 5"
+      reflectance="0.2"/>
+
+    <mesh
+      name="tool_main_insert_Shape_IndexedFaceSet.030"
+      file="tool_main_insert_Shape_IndexedFaceSet.030.obj"/>
+
+    <mesh
+      name="tool_roll_link_Shape_IndexedFaceSet"
+      file="tool_roll_link_Shape_IndexedFaceSet.obj"/>
+
+    <mesh
+      name="tool_pitch_link_Shape_IndexedFaceSet.014"
+      file="tool_pitch_link_Shape_IndexedFaceSet.014.obj"/>
+
+    <mesh
+      name="tool_yaw_link_Shape_IndexedFaceSet.015"
+      file="tool_yaw_link_Shape_IndexedFaceSet.015.obj"/>
+
+    <mesh
+      name="gripper_left_Shape_IndexedFaceSet.006"
+      file="gripper_left_Shape_IndexedFaceSet.006.obj"/>
+
+    <mesh
+      name="gripper_right_Shape_IndexedFaceSet.022"
+      file="gripper_right_Shape_IndexedFaceSet.022.obj"/>
+
+  </asset>
+
+
+  <worldbody>
+
+    <light
+      diffuse=".5 .5 .5"
+      pos="0 0 10"
+      dir="0 0 -1"/>
+
+
+    <!-- ====================================================== -->
+    <!-- FLOOR -->
+    <!-- ====================================================== -->
+
+    <geom
+      type="plane"
+      size="2 2 1"
+      material="groundplane"
+      pos="0 0 -0.02"/>
+
+
+    <!-- ====================================================== -->
+    <!-- BOX -->
+    <!-- ====================================================== -->
+
+    <body
+      name="box"
+      pos="0.2 -0.3 0.05">
+
+      <geom
+        type="box"
+        name="box_geom"
+        size="0.03 0.03 0.03"
+        rgba="0.8 0.2 0.2 1"
+        mass="0.2"/>
+
+    </body>
+
+
+    <!-- ====================================================== -->
+    <!-- TOOL 1 -->
+    <!-- ====================================================== -->
+
+    <body
+      name="tool_main_insert_Shape_IndexedFaceSet.030"
+      pos="0.0 0.0 0.0"
+      quat="0.7071068286895752 0.7071067690849304 0.0 0.0">
+
+      <geom
+        type="mesh"
+        name="tool_main_insert_Shape_IndexedFaceSet.030 geom"
+        mesh="tool_main_insert_Shape_IndexedFaceSet.030"
+        rgba="255.0 1.0 1.0 1.0"/>
+
+      <freejoint/>
+
+
+      <!-- ROLL -->
+
+      <body
+        name="tool_roll_link_Shape_IndexedFaceSet"
+        pos="0.46589118242263794 1.6298145055770874e-08 1.629087265087037e-08"
+        quat="0.7071068286895752 -2.6692537957728746e-08 0.7071067690849304 2.6692536181371906e-08">
+
+        <joint
+          name="joint_roll"
+          type="hinge"
+          axis="0 0 1"
+          range="-3.14159 3.14159"/>
+
+        <geom
+          type="mesh"
+          name="tool_roll_link_Shape_IndexedFaceSet geom"
+          mesh="tool_roll_link_Shape_IndexedFaceSet"
+          rgba="1.0 1.0 1.0 1.0"/>
+
+
+        <!-- PITCH -->
+
+        <body
+          name="tool_pitch_link_Shape_IndexedFaceSet.014"
+          pos="1.7763568394002505e-15 3.552713678800501e-15 0.0"
+          quat="0.5000000596046448 -0.5 -0.5 -0.4999999701976776">
+
+          <joint
+            name="joint_pitch"
+            type="hinge"
+            axis="0 0 1"
+            range="-1.5708 1.5708"/>
+
+          <geom
+            type="mesh"
+            name="tool_pitch_link_Shape_IndexedFaceSet.014 geom"
+            mesh="tool_pitch_link_Shape_IndexedFaceSet.014"
+            rgba="1.0 1.0 1.0 1.0"/>
+
+
+          <!-- YAW (PASSIVE) -->
+
+          <body
+            name="tool_yaw_link_Shape_IndexedFaceSet.015"
+            pos="0.008991986513137817 -1.2500141565396916e-05 -2.426503442620742e-12"
+            quat="0.7071068286895752 0.7071067690849304 -4.969171724626556e-16 -4.492481823441478e-22">
+
+            <geom
+              type="mesh"
+              name="tool_yaw_link_Shape_IndexedFaceSet.015 geom"
+              mesh="tool_yaw_link_Shape_IndexedFaceSet.015"
+              rgba="1.0 1.0 1.0 1.0"/>
+
+
+            <!-- LEFT GRIPPER -->
+
+            <body
+              name="gripper_left_Shape_IndexedFaceSet.006"
+              pos="0.0 0.0 0.0"
+              quat="0.70710688829422 6.693662195567584e-15 5.3385061704602776e-08 -0.7071066498756409">
+
+              <joint
+                name="joint_gripper_left"
+                type="hinge"
+                axis="0 0 1"
+                range="0.0 1.0472"/>
+
+              <geom
+                type="mesh"
+                name="gripper_left_Shape_IndexedFaceSet.006 geom"
+                mesh="gripper_left_Shape_IndexedFaceSet.006"
+                rgba="1.0 1.0 1.0 1.0"/>
+
+            </body>
+
+
+            <!-- RIGHT GRIPPER -->
+
+            <body
+              name="gripper_right_Shape_IndexedFaceSet.022"
+              pos="0.0 0.0 0.0"
+              quat="0.70710688829422 6.693662195567584e-15 5.3385061704602776e-08 -0.7071066498756409">
+
+              <joint
+                name="joint_gripper_right"
+                type="hinge"
+                axis="0 0 -1"
+                range="0.0 1.0472"/>
+
+              <geom
+                type="mesh"
+                name="gripper_right_Shape_IndexedFaceSet.022 geom"
+                mesh="gripper_right_Shape_IndexedFaceSet.022"
+                rgba="1.0 1.0 1.0 1.0"/>
+
+            </body>
+
+          </body>
+
+        </body>
+
+      </body>
+
+    </body>
+
+
+    <!-- ====================================================== -->
+    <!-- TOOL 2 -->
+    <!-- ====================================================== -->
+
+    <body
+      name="tool_main_insert_Shape_IndexedFaceSet.030_2"
+      pos="0.8 0.0 0.0"
+      quat="0.7071068286895752 0.7071067690849304 0.0 0.0">
+
+      <geom
+        type="mesh"
+        name="tool_main_insert_Shape_IndexedFaceSet.030_2 geom"
+        mesh="tool_main_insert_Shape_IndexedFaceSet.030"
+        rgba="255.0 1.0 1.0 1.0"/>
+
+      <freejoint/>
+
+
+      <!-- ROLL -->
+
+      <body
+        name="tool_roll_link_Shape_IndexedFaceSet_2"
+        pos="0.46589118242263794 1.6298145055770874e-08 1.629087265087037e-08"
+        quat="0.7071068286895752 -2.6692537957728746e-08 0.7071067690849304 2.6692536181371906e-08">
+
+        <joint
+          name="joint_roll_2"
+          type="hinge"
+          axis="0 0 1"
+          range="-3.14159 3.14159"/>
+
+        <geom
+          type="mesh"
+          name="tool_roll_link_Shape_IndexedFaceSet_2 geom"
+          mesh="tool_roll_link_Shape_IndexedFaceSet"
+          rgba="1.0 1.0 1.0 1.0"/>
+
+
+        <!-- PITCH -->
+
+        <body
+          name="tool_pitch_link_Shape_IndexedFaceSet.014_2"
+          pos="1.7763568394002505e-15 3.552713678800501e-15 0.0"
+          quat="0.5000000596046448 -0.5 -0.5 -0.4999999701976776">
+
+          <joint
+            name="joint_pitch_2"
+            type="hinge"
+            axis="0 0 1"
+            range="-1.5708 1.5708"/>
+
+          <geom
+            type="mesh"
+            name="tool_pitch_link_Shape_IndexedFaceSet.014_2 geom"
+            mesh="tool_pitch_link_Shape_IndexedFaceSet.014"
+            rgba="1.0 1.0 1.0 1.0"/>
+
+
+          <!-- YAW (PASSIVE) -->
+
+          <body
+            name="tool_yaw_link_Shape_IndexedFaceSet.015_2"
+            pos="0.008991986513137817 -1.2500141565396916e-05 -2.426503442620742e-12"
+            quat="0.7071068286895752 0.7071067690849304 -4.969171724626556e-16 -4.492481823441478e-22">
+
+            <geom
+              type="mesh"
+              name="tool_yaw_link_Shape_IndexedFaceSet.015_2 geom"
+              mesh="tool_yaw_link_Shape_IndexedFaceSet.015"
+              rgba="1.0 1.0 1.0 1.0"/>
+
+
+            <!-- LEFT GRIPPER -->
+
+            <body
+              name="gripper_left_Shape_IndexedFaceSet.006_2"
+              pos="0.0 0.0 0.0"
+              quat="0.70710688829422 6.693662195567584e-15 5.3385061704602776e-08 -0.7071066498756409">
+
+              <joint
+                name="joint_gripper_left_2"
+                type="hinge"
+                axis="0 0 1"
+                range="0.0 1.0472"/>
+
+              <geom
+                type="mesh"
+                name="gripper_left_Shape_IndexedFaceSet.006_2 geom"
+                mesh="gripper_left_Shape_IndexedFaceSet.006"
+                rgba="1.0 1.0 1.0 1.0"/>
+
+            </body>
+
+
+            <!-- RIGHT GRIPPER -->
+
+            <body
+              name="gripper_right_Shape_IndexedFaceSet.022_2"
+              pos="0.0 0.0 0.0"
+              quat="0.70710688829422 6.693662195567584e-15 5.3385061704602776e-08 -0.7071066498756409">
+
+              <joint
+                name="joint_gripper_right_2"
+                type="hinge"
+                axis="0 0 -1"
+                range="0.0 1.0472"/>
+
+              <geom
+                type="mesh"
+                name="gripper_right_Shape_IndexedFaceSet.022_2 geom"
+                mesh="gripper_right_Shape_IndexedFaceSet.022"
+                rgba="1.0 1.0 1.0 1.0"/>
+
+            </body>
+
+          </body>
+
+        </body>
+
+      </body>
+
+    </body>
+
+
+    <!-- ====================================================== -->
+    <!-- MOCAP 1 -->
+    <!-- ====================================================== -->
+
+    <body
+      mocap="true"
+      name="mocap"
+      pos="0.1 0.1 0.1">
+
+      <site
+        pos="0 0 0.075"
+        size="0.003 0.003 0.1"
+        type="box"
+        name="mocap_left_site1"
+        rgba="0 0 1 1"/>
+
+      <site
+        pos="0 0.075 0"
+        size="0.003 0.1 0.003"
+        type="box"
+        name="mocap_left_site2"
+        rgba="0 1 0 1"/>
+
+      <site
+        pos="0.075 0 0"
+        size="0.1 0.003 0.003"
+        type="box"
+        name="mocap_left_site3"
+        rgba="1 0 0 1"/>
+
+    </body>
+
+
+    <!-- ====================================================== -->
+    <!-- MOCAP 2 -->
+    <!-- ====================================================== -->
+
+    <body
+      mocap="true"
+      name="mocap2"
+      pos="1.05 0.1 0.1">
+
+      <site
+        pos="0 0 0.075"
+        size="0.003 0.003 0.1"
+        type="box"
+        name="mocap_right_site1"
+        rgba="0 0 1 1"/>
+
+      <site
+        pos="0 0.075 0"
+        size="0.003 0.1 0.003"
+        type="box"
+        name="mocap_right_site2"
+        rgba="0 1 0 1"/>
+
+      <site
+        pos="0.075 0 0"
+        size="0.1 0.003 0.003"
+        type="box"
+        name="mocap_right_site3"
+        rgba="1 0 0 1"/>
+
+    </body>
+
+  </worldbody>
+
+
+  <!-- ====================================================== -->
+  <!-- ACTUATORS -->
+  <!-- ====================================================== -->
+
+  <actuator>
+
+    <position
+      name="act_roll"
+      joint="joint_roll"
+      kp="100"
+      damping="1"/>
+
+    <position
+      name="act_pitch"
+      joint="joint_pitch"
+      kp="100"
+      damping="1"/>
+
+    <position
+      name="act_gripper_left"
+      joint="joint_gripper_left"
+      kp="5"
+      damping="0.5"/>
+
+    <position
+      name="act_gripper_right"
+      joint="joint_gripper_right"
+      kp="5"
+      damping="0.5"/>
+
+
+    <position
+      name="act_roll_2"
+      joint="joint_roll_2"
+      kp="100"
+      damping="1"/>
+
+    <position
+      name="act_pitch_2"
+      joint="joint_pitch_2"
+      kp="100"
+      damping="1"/>
+
+    <position
+      name="act_gripper_left_2"
+      joint="joint_gripper_left_2"
+      kp="5"
+      damping="0.5"/>
+
+    <position
+      name="act_gripper_right_2"
+      joint="joint_gripper_right_2"
+      kp="5"
+      damping="0.5"/>
+
+  </actuator>
+
+
+  <!-- ====================================================== -->
+  <!-- SELF-COLLISION EXCLUSIONS -->
+  <!-- ====================================================== -->
+
+  <contact>
+
+    <exclude
+      body1="tool_main_insert_Shape_IndexedFaceSet.030"
+      body2="tool_roll_link_Shape_IndexedFaceSet"/>
+
+    <exclude
+      body1="tool_main_insert_Shape_IndexedFaceSet.030_2"
+      body2="tool_roll_link_Shape_IndexedFaceSet_2"/>
+
+  </contact>
+
+
+  <!-- ====================================================== -->
+  <!-- MOCAP WELDS -->
+  <!-- ====================================================== -->
+
+  <equality>
+
+    <weld
+      body1="mocap"
+      body2="tool_main_insert_Shape_IndexedFaceSet.030"
+      relpose="0 0 0 1 0 0 0"
+      solref="0.01 1"
+      solimp="0.9 0.95 0.001"/>
+
+    <weld
+      body1="mocap2"
+      body2="tool_main_insert_Shape_IndexedFaceSet.030_2"
+      relpose="0 0 0 1 0 0 0"
+      solref="0.01 1"
+      solimp="0.9 0.95 0.001"/>
+
+  </equality>
+
+</mujoco>
