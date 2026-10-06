@@ -24,3 +24,6 @@ frames_*.pdf
 *.app
 *.dmg
 
+
+bridge_logs/
+/unity-sim/UR3-medical-robot/BridgeLogs/

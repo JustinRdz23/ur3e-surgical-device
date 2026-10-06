@@ -1,7 +1,11 @@
 import argparse
+import collections
+import csv
 import json
 import math
+import os
 import socket
+import threading
 import time
 
 import mujoco
@@ -12,6 +16,10 @@ UNITY_HOST = "127.0.0.1"
 STATE_PORT = 5005
 CMD_PORT = 5006
 SEND_HZ = 60.0
+SCHEMA = 1
+SCENE_EVERY = 30
+MAX_CONTACTS = 32
+TOOL_JOINTS = ["joint_roll", "joint_pitch", "joint_gripper_left", "joint_gripper_right"]
 
 UR_JOINTS = ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
              "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
@@ -75,15 +83,20 @@ def ur3e_singularity(q):
             "sigma_min": float(s[-1]), "cond": float(s[0] / max(s[-1], 1e-9))}
 
 
-class DemoMaster:
-    def __init__(self):
-        self.t0 = time.perf_counter()
+def short_name(n):
+    i = n.find("_Shape")
+    return n[:i] if i > 0 else n
 
+
+class DemoMaster:
+    # driven by sim time so the trajectory is reproducible run to run
     def spin(self):
         pass
 
-    def joints(self):
-        t = time.perf_counter() - self.t0
+    def jaw(self, t):
+        return max(0.0, 0.9 * math.sin(2 * math.pi * t / 8.0))
+
+    def joints(self, t):
         return {"shoulder_pan_joint": 0.0, "shoulder_lift_joint": -1.57,
                 "elbow_joint": 1.2 + 0.3 * math.sin(0.2 * t), "wrist_1_joint": -1.2,
                 "wrist_2_joint": 1.57 + 0.6 * math.sin(0.5 * t),
@@ -118,7 +131,10 @@ class RosMaster:
     def spin(self):
         self.rclpy.spin_once(self.node, timeout_sec=0.0)
 
-    def joints(self):
+    def jaw(self, t):
+        return None
+
+    def joints(self, t):
         if time.perf_counter() - self.stamp > 0.5 or not all(j in self.q for j in UR_JOINTS):
             return None
         return dict(self.q)
@@ -141,11 +157,13 @@ class Teleop:
     def _jid(self, name):
         return mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, name)
 
-    def update(self, data, qm, buttons, dt):
+    def update(self, data, qm, buttons, dt, jaw_cmd=None):
         if buttons.get("jaw_open"):
             self.jaw = min(JAW_MAX, self.jaw + JAW_SPEED * dt)
-        if buttons.get("jaw_close"):
+        elif buttons.get("jaw_close"):
             self.jaw = max(0.0, self.jaw - JAW_SPEED * dt)
+        elif jaw_cmd is not None:
+            self.jaw = jaw_cmd
         for jn in ("joint_gripper_left", "joint_gripper_right"):
             j = self._jid(jn)
             if j >= 0 and j in self.act:
@@ -170,6 +188,105 @@ class Teleop:
             data.ctrl[a] = float(np.clip(target, lo, hi))
 
 
+class CmdReceiver:
+    # own thread so acks are timestamped on arrival, not when the main loop wakes up
+    def __init__(self, port):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind(("0.0.0.0", port))
+        self.sock.settimeout(0.2)
+        self.buttons = {}
+        self.reset = False
+        self.acks = collections.deque()
+        self.running = True
+        threading.Thread(target=self._loop, daemon=True).start()
+
+    def _loop(self):
+        while self.running:
+            try:
+                raw = self.sock.recvfrom(4096)[0]
+            except socket.timeout:
+                continue
+            except OSError:
+                return
+            t = time.perf_counter()
+            try:
+                msg = json.loads(raw.decode())
+            except ValueError:
+                continue
+            self.buttons = msg.get("buttons", self.buttons)
+            if msg.get("reset"):
+                self.reset = True
+            if "ack" in msg:
+                self.acks.append((msg["ack"], float(msg.get("hold_ms", 0.0)), t))
+
+    def close(self):
+        self.running = False
+        self.sock.close()
+
+
+def r6(v):
+    return [round(float(x), 6) for x in v]
+
+
+def read_contacts(model, data, names, jaw_ids):
+    out, jaw_force = [], 0.0
+    f = np.zeros(6)
+    for k in range(data.ncon):
+        c = data.contact[k]
+        b1, b2 = model.geom_bodyid[c.geom1], model.geom_bodyid[c.geom2]
+        mujoco.mj_contactForce(model, data, k, f)
+        if b1 in jaw_ids or b2 in jaw_ids:
+            jaw_force += abs(f[0])
+        if len(out) < MAX_CONTACTS:
+            fw = c.frame.reshape(3, 3).T @ f[:3]  # contact frame -> world
+            out.append([names[b1], names[b2]] + r6(pos_to_unity(c.pos))
+                       + [round(float(f[0]), 4)] + r6(pos_to_unity(fw)))
+    return out, jaw_force
+
+
+PRIM_TYPES = {int(mujoco.mjtGeom.mjGEOM_BOX): "box", int(mujoco.mjtGeom.mjGEOM_SPHERE): "sphere"}
+
+
+def body_poses(data, body_names):
+    return {n: r6(pos_to_unity(data.xpos[i + 1]) + quat_to_unity(data.xquat[i + 1]))
+            for i, n in enumerate(body_names)}
+
+
+def scene_prims(model, data):
+    # primitive geoms not in the Unity prefab (e.g. tissue); group 3 = collision-only, skipped
+    out = []
+    q = np.zeros(4)
+    for g in range(model.ngeom):
+        kind = PRIM_TYPES.get(int(model.geom_type[g]))
+        if kind is None or model.geom_group[g] >= 3:
+            continue
+        s = model.geom_size[g]
+        mujoco.mju_mat2Quat(q, data.geom_xmat[g])
+        out.append({"name": model.geom(g).name, "type": kind,
+                    "size": r6([s[0], s[2], s[1]]),
+                    "pose": r6(pos_to_unity(data.geom_xpos[g]) + quat_to_unity(q)),
+                    "rgba": [round(float(v), 3) for v in model.geom_rgba[g]]})
+    return out
+
+
+class BridgeLog:
+    def __init__(self, folder):
+        os.makedirs(folder, exist_ok=True)
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        self.files = [open(os.path.join(folder, f"{k}_{stamp}.csv"), "w", newline="", buffering=1)
+                      for k in ("mujoco", "acks")]
+        self.state, self.ack = (csv.writer(f) for f in self.files)
+        self.state.writerow(["seq", "t_sim", "t_send", "loop_ms", "step_ms", "n_steps", "bytes",
+                             "ncon", "n_contacts_sent", "jaw_force"] + TOOL_JOINTS)
+        self.ack.writerow(["seq", "t_send", "t_ack", "rtt_ms", "unity_hold_ms", "net_rtt_ms",
+                           "est_latency_ms"])
+        print(f"[bridge] log -> {os.path.abspath(folder)}  ({stamp})")
+
+    def close(self):
+        for f in self.files:
+            f.close()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="../mjcf/hello_unity.xml")
@@ -178,6 +295,10 @@ def main():
     ap.add_argument("--scale", type=float, default=1.0, help="escala de movimiento maestro->esclavo")
     ap.add_argument("--demo", action="store_true", help="maestro sintetico (sin ROS2/robot)")
     ap.add_argument("--viewer", action="store_true")
+    ap.add_argument("--host", default=UNITY_HOST, help="IP de la maquina con Unity")
+    ap.add_argument("--log", metavar="DIR", help="guarda CSVs de estado y acks en DIR")
+    ap.add_argument("--duration", type=float, default=0.0,
+                    help="segundos de sim y termina (0 = infinito)")
     args = ap.parse_args()
 
     model = mujoco.MjModel.from_xml_path(args.model)
@@ -186,81 +307,117 @@ def main():
     teleop = Teleop(model, mapping)
     master = DemoMaster() if args.demo else RosMaster(args.arm, args.topic)
 
+    names = [short_name(model.body(i).name) for i in range(model.nbody)]
     body_names = [model.body(i).name for i in range(1, model.nbody)]
-    joint_names = [model.joint(i).name for i in range(model.njnt)]
     jaw_ids = {i for i in range(model.nbody) if "gripper" in model.body(i).name}
+    tool_adr = [model.joint(n).qposadr[0] for n in TOOL_JOINTS]
+    # body poses at qpos0: Unity calibrates against these, not against whatever pose it sees first
+    d0 = mujoco.MjData(model)
+    mujoco.mj_forward(model, d0)
+    rest = body_poses(d0, body_names)
 
     tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    rx.bind(("0.0.0.0", CMD_PORT))
-    rx.setblocking(False)
-    buttons = {}
+    rx = CmdReceiver(CMD_PORT)
+    log = BridgeLog(args.log) if args.log else None
+    sent = collections.OrderedDict()
     viewer = mujoco.viewer.launch_passive(model, data) if args.viewer else None
 
     period = 1.0 / SEND_HZ
-    n_steps = max(1, int(round(period / model.opt.timestep)))
+    max_steps = 4 * int(math.ceil(period / model.opt.timestep))
     pitch_j = model.joint("joint_pitch")
     print(f"[bridge] maestro={'DEMO' if args.demo else 'UR3e ' + args.arm + ' ' + args.topic}  "
-          f"estado->:{STATE_PORT}  botones<-:{CMD_PORT}")
+          f"estado->{args.host}:{STATE_PORT}  botones<-:{CMD_PORT}")
 
+    seq = 0
+    t_start = next_tick = time.perf_counter()
     try:
         while viewer is None or viewer.is_running():
             wall0 = time.perf_counter()
-
-            while True:
-                try:
-                    msg = json.loads(rx.recvfrom(4096)[0].decode())
-                    buttons = msg.get("buttons", buttons)
-                    if msg.get("reset"):
-                        mujoco.mj_resetData(model, data)
-                        teleop.clutch, teleop.jaw = True, 0.0
-                except BlockingIOError:
-                    break
-                except ValueError:
-                    break
+            if args.duration and data.time >= args.duration:
+                break
+            if rx.reset:
+                rx.reset = False
+                mujoco.mj_resetData(model, data)
+                teleop.clutch, teleop.jaw = True, 0.0
+                t_start = wall0
 
             master.spin()
-            qm = master.joints()
-            teleop.update(data, qm, buttons, period)
+            qm = master.joints(data.time)
+            teleop.update(data, qm, rx.buttons, period, master.jaw(data.time))
 
-            for _ in range(n_steps):
+            # real-time sync: step until sim time catches up with wall time
+            step0 = time.perf_counter()
+            n = 0
+            while data.time < wall0 - t_start and n < max_steps:
                 mujoco.mj_step(model, data)
+                n += 1
+            if n == max_steps:
+                t_start = wall0 - data.time  # can't keep up: fall behind instead of spiraling
+            step_ms = (time.perf_counter() - step0) * 1e3
             if viewer is not None:
                 viewer.sync()
 
-            jaw_force = 0.0
-            for k in range(data.ncon):
-                c = data.contact[k]
-                if model.geom_bodyid[c.geom1] in jaw_ids or model.geom_bodyid[c.geom2] in jaw_ids:
-                    f = np.zeros(6)
-                    mujoco.mj_contactForce(model, data, k, f)
-                    jaw_force += abs(f[0])
-
+            contacts, jaw_force = read_contacts(model, data, names, jaw_ids)
+            tool_q = [float(data.qpos[a]) for a in tool_adr]
             master_state = None
             if qm is not None:
                 qv = [qm[j] for j in UR_JOINTS]
-                master_state = {"q": qv, "sing": ur3e_singularity(qv)}
+                master_state = {"q": r6(qv), "sing": ur3e_singularity(qv)}
 
+            seq += 1
             state = {
-                "t": float(data.time),
+                "v": SCHEMA,
+                "seq": seq,
+                "t_sim": round(float(data.time), 6),
                 "master_ok": qm is not None,
                 "clutch": teleop.clutch,
                 "master": master_state,
-                "q": {n: float(data.qpos[model.joint(n).qposadr[0]]) for n in joint_names},
-                "bodies": {n: pos_to_unity(data.xpos[i + 1]) + quat_to_unity(data.xquat[i + 1])
-                           for i, n in enumerate(body_names)},
+                "tool_q": r6(tool_q),
+                "bodies": body_poses(data, body_names),
+                "contacts": contacts,
                 "pitch_margin": float(1.0 - abs(data.qpos[pitch_j.qposadr[0]]) / pitch_j.range[1]),
                 "jaw_contact_force": float(jaw_force),
                 "ncon": int(data.ncon),
             }
-            tx.sendto(json.dumps(state).encode(), (UNITY_HOST, STATE_PORT))
+            if seq % SCENE_EVERY == 1:
+                state["scene"] = scene_prims(model, data)
+                state["rest"] = rest
+            # same clock as Unity's Stopwatch on Windows (QueryPerformanceCounter)
+            t_send = state["t_send"] = time.perf_counter()
+            payload = json.dumps(state, separators=(",", ":")).encode()
+            tx.sendto(payload, (args.host, STATE_PORT))
 
-            dt = time.perf_counter() - wall0
-            if dt < period:
-                time.sleep(period - dt)
+            sent[seq] = t_send
+            if len(sent) > 600:
+                sent.popitem(last=False)
+            while rx.acks:
+                aseq, hold, t_ack = rx.acks.popleft()
+                t0 = sent.pop(aseq, None)
+                if t0 is None or log is None:
+                    continue
+                rtt = (t_ack - t0) * 1e3
+                log.ack.writerow([aseq, f"{t0:.6f}", f"{t_ack:.6f}", f"{rtt:.3f}", f"{hold:.3f}",
+                                  f"{rtt - hold:.3f}", f"{(rtt - hold) / 2 + hold:.3f}"])
+
+            loop_ms = (time.perf_counter() - wall0) * 1e3
+            if log is not None:
+                log.state.writerow([seq, f"{data.time:.6f}", f"{t_send:.6f}", f"{loop_ms:.3f}",
+                                    f"{step_ms:.3f}", n, len(payload), data.ncon, len(contacts),
+                                    f"{jaw_force:.4f}"] + [f"{q:.6f}" for q in tool_q])
+
+            # absolute deadlines: sleep overshoot doesn't accumulate into rate drift
+            next_tick += period
+            wait = next_tick - time.perf_counter()
+            if wait > 0:
+                time.sleep(wait)
+            else:
+                next_tick = time.perf_counter()
     except KeyboardInterrupt:
         print("\n[bridge] detenido")
     finally:
+        rx.close()
+        if log is not None:
+            log.close()
         if viewer is not None:
             viewer.close()
         if hasattr(master, "close"):
