@@ -3,10 +3,21 @@
   <option timestep="0.002"/>
   <default>
     <joint armature="0.001" damping="0.01"/>
+    <default class="visual">
+      <geom contype="0" conaffinity="0"/>
+    </default>
+    <default class="jaw_col">
+      <geom type="box" size="0.0006 0.0028 0.0008" group="3" rgba="0 0.6 1 0.4"/>
+    </default>
   </default>
   <worldbody>
     <light diffuse=".5 .5 .5" pos="0 0 10" dir="0 0 -1"/>
     <geom type="plane" size="2 2 1" rgba="1 1 1 1" pos ="0 0 -0.02" />
+
+    <!-- static target in the tip's pitch sweep (+y) -->
+    <body name="tissue" pos="0.483 0.0115 0">
+      <geom name="tissue" type="box" size="0.006 0.005 0.006" rgba="0.85 0.45 0.45 1"/>
+    </body>
 
     <body name="tool_main_insert_Shape_IndexedFaceSet.030" pos="0.0 0.0 0.0" quat="0.7071068286895752 0.7071067690849304 0.0 0.0">
       <geom type="mesh" name="tool_main_insert_Shape_IndexedFaceSet.030 geom" mesh="tool_main_insert_Shape_IndexedFaceSet.030" rgba="255.0 1.0 1.0 1.0"/>
@@ -24,12 +35,14 @@
 
             <body name="gripper_left_Shape_IndexedFaceSet.006" pos="0.0 0.0 0.0" quat="0.70710688829422 6.693662195567584e-15 5.3385061704602776e-08 -0.7071066498756409">
               <joint name="joint_gripper_left" type="hinge" axis="0 0 1" range="0.0 1.0472"/>
-              <geom type="mesh" name="gripper_left_Shape_IndexedFaceSet.006 geom" mesh="gripper_left_Shape_IndexedFaceSet.006" rgba="1.0 1.0 1.0 1.0"/>
+              <geom type="mesh" class="visual" name="gripper_left_Shape_IndexedFaceSet.006 geom" mesh="gripper_left_Shape_IndexedFaceSet.006" rgba="1.0 1.0 1.0 1.0"/>
+              <geom class="jaw_col" name="jaw_left_col" pos="-0.00055 0.0068 0"/>
             </body>
 
             <body name="gripper_right_Shape_IndexedFaceSet.022" pos="0.0 0.0 0.0" quat="0.70710688829422 6.693662195567584e-15 5.3385061704602776e-08 -0.7071066498756409">
               <joint name="joint_gripper_right" type="hinge" axis="0 0 -1" range="0.0 1.0472"/>
-              <geom type="mesh" name="gripper_right_Shape_IndexedFaceSet.022 geom" mesh="gripper_right_Shape_IndexedFaceSet.022" rgba="1.0 1.0 1.0 1.0"/>
+              <geom type="mesh" class="visual" name="gripper_right_Shape_IndexedFaceSet.022 geom" mesh="gripper_right_Shape_IndexedFaceSet.022" rgba="1.0 1.0 1.0 1.0"/>
+              <geom class="jaw_col" name="jaw_right_col" pos="0.00055 0.0068 0"/>
             </body>
           </body>
         </body>
@@ -47,15 +60,15 @@
   </asset>
 
   <actuator>
-    <position name="act_roll" joint="joint_roll" kp="100" ctrlrange="-3.14159 3.14159"/>
-    <position name="act_pitch" joint="joint_pitch" kp="100" ctrlrange="-1.5708 1.5708"/>
-    <position name="act_gripper_left" joint="joint_gripper_left" kp="5" ctrlrange="0 1.0472"/>
-    <position name="act_gripper_right" joint="joint_gripper_right" kp="5" ctrlrange="0 1.0472"/>
+    <!-- forcerange keeps tip forces in the few-N range (kp alone gave ~1000 N against the tissue) -->
+    <position name="act_roll" joint="joint_roll" kp="100" ctrlrange="-3.14159 3.14159" forcerange="-0.05 0.05"/>
+    <position name="act_pitch" joint="joint_pitch" kp="100" ctrlrange="-1.5708 1.5708" forcerange="-0.05 0.05"/>
+    <position name="act_gripper_left" joint="joint_gripper_left" kp="5" ctrlrange="0 1.0472" forcerange="-0.02 0.02"/>
+    <position name="act_gripper_right" joint="joint_gripper_right" kp="5" ctrlrange="0 1.0472" forcerange="-0.02 0.02"/>
   </actuator>
 
   <contact>
     <exclude body1="tool_main_insert_Shape_IndexedFaceSet.030" body2="tool_roll_link_Shape_IndexedFaceSet"/>
-    <exclude body1="gripper_left_Shape_IndexedFaceSet.006" body2="gripper_right_Shape_IndexedFaceSet.022"/>
   </contact>
 
 </mujoco>
