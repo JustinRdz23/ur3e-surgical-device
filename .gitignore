@@ -24,3 +24,5 @@ frames_*.pdf
 *.app
 *.dmg
 
+
+env/
