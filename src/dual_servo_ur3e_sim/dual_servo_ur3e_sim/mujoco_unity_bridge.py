@@ -104,6 +104,43 @@ class DemoMaster:
                 "wrist_3_joint": 1.0 * math.sin(0.3 * t)}
 
 
+class RtdeMaster:
+    # reads the UR3e directly over RTDE (port 30004), no ROS needed; receive-only, never commands the arm
+    RECONNECT_PERIOD_S = 2.0
+
+    def __init__(self, ip):
+        import rtde_receive
+        self.r = rtde_receive.RTDEReceiveInterface(ip)
+        self.next_retry = 0.0
+
+    def spin(self):
+        # the receive link drops when the robot restarts its control script; retry without stalling the sim
+        now = time.perf_counter()
+        if self.r.isConnected() or now < self.next_retry:
+            return
+        self.next_retry = now + self.RECONNECT_PERIOD_S
+        print("[bridge] RTDE desconectado, reintentando...")
+        try:
+            if self.r.reconnect():
+                print("[bridge] RTDE reconectado")
+        except RuntimeError as e:
+            print(f"[bridge] reconexion fallo: {e}")
+
+    def jaw(self, t):
+        return None
+
+    def joints(self, t):
+        if not self.r.isConnected():
+            return None
+        try:
+            return dict(zip(UR_JOINTS, self.r.getActualQ()))
+        except RuntimeError:
+            return None
+
+    def close(self):
+        self.r.disconnect()
+
+
 class RosMaster:
     def __init__(self, arm, topic):
         import rclpy
@@ -295,6 +332,7 @@ def main():
     ap.add_argument("--topic", default="/joint_states")
     ap.add_argument("--scale", type=float, default=1.0, help="escala de movimiento maestro->esclavo")
     ap.add_argument("--demo", action="store_true", help="maestro sintetico (sin ROS2/robot)")
+    ap.add_argument("--robot-ip", help="IP del UR3e: lee las juntas por RTDE directo, sin ROS2")
     ap.add_argument("--viewer", action="store_true")
     ap.add_argument("--host", default=UNITY_HOST, help="IP de la maquina con Unity")
     ap.add_argument("--log", metavar="DIR", help="guarda CSVs de estado y acks en DIR")
@@ -306,7 +344,12 @@ def main():
     data = mujoco.MjData(model)
     mapping = {k: (v[0], v[1] * args.scale) for k, v in DEFAULT_MAP.items()}
     teleop = Teleop(model, mapping)
-    master = DemoMaster() if args.demo else RosMaster(args.arm, args.topic)
+    if args.demo:
+        master, desc = DemoMaster(), "DEMO"
+    elif args.robot_ip:
+        master, desc = RtdeMaster(args.robot_ip), f"UR3e RTDE {args.robot_ip}"
+    else:
+        master, desc = RosMaster(args.arm, args.topic), f"UR3e {args.arm} {args.topic}"
 
     names = [short_name(model.body(i).name) for i in range(model.nbody)]
     body_names = [model.body(i).name for i in range(1, model.nbody)]
@@ -326,7 +369,7 @@ def main():
     period = 1.0 / SEND_HZ
     max_steps = 4 * int(math.ceil(period / model.opt.timestep))
     pitch_j = model.joint("joint_pitch")
-    print(f"[bridge] maestro={'DEMO' if args.demo else 'UR3e ' + args.arm + ' ' + args.topic}  "
+    print(f"[bridge] maestro={desc}  "
           f"estado->{args.host}:{STATE_PORT}  botones<-:{CMD_PORT}")
 
     seq = 0
