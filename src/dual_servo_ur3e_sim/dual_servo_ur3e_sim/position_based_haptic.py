@@ -28,19 +28,19 @@ Q_OFFSET_INV = np.array([
     -Q_OFFSET[1],
     -Q_OFFSET[2],
     -Q_OFFSET[3]
-])
+])  
 
 FRAME_OFFSET_POS = np.array([0.0, 0.0, 0.8])
 
 ARROW_LENGTH_SCALE = 0.01
 ARROW_WIDTH = 0.004
 
-STIFFNESS_LIN = 1000.0
+STIFFNESS_LIN = 2200.0
 DAMPING_LIN = 15.0
 FORCE_SCALE = 0.4
-MAX_FORCE = 20.0
+MAX_FORCE = 100.0
+INTERNAL_MAX_FORCE = 100.0
 
-VELOCITY_FILTER_ALPHA = 0.15
 
 
 def draw_force_arrow(viewer, start, force_vec):
@@ -104,7 +104,6 @@ def main():
     step_count = 0
 
     prev_gap_pos = None
-    prev_gap_vel = np.zeros(3)
     prev_time = None
 
     program_start_time = time.time()
@@ -116,6 +115,7 @@ def main():
         ) as viewer:
 
             while running and viewer.is_running():
+
                 loop_start = time.time()
 
                 current_pose = rtde_r.getActualTCPPose()
@@ -137,6 +137,7 @@ def main():
                 )
 
                 if not startup_complete:
+
                     WRENCH[0:3] = [0.0, 0.0, 0.0]
 
                     data.xfrc_applied[
@@ -150,6 +151,7 @@ def main():
                     ] = 0.0
 
                     if elapsed_since_start >= STARTUP_DELAY_S:
+
                         data.qpos[0:3] = data.mocap_pos[0]
 
                         data.qvel[0:3] = 0.0
@@ -169,7 +171,6 @@ def main():
                             - sphere_pos
                         )
 
-                        prev_gap_vel = np.zeros(3)
                         prev_time = time.time()
 
                         startup_complete = True
@@ -178,15 +179,27 @@ def main():
                         print("==========================================")
                         print("VIRTUAL COUPLING STARTED")
                         print("==========================================")
-                        print(f"Stiffness:          {STIFFNESS_LIN:.2f} N/m")
-                        print(f"Damping:            {DAMPING_LIN:.2f} N/(m/s)")
-                        print(f"Velocity filter:    {VELOCITY_FILTER_ALPHA:.2f}")
-                        print(f"Initial gap:        {prev_gap_pos}")
-                        print(f"Initial |gap|:      {np.linalg.norm(prev_gap_pos):.6f} m")
+                        print(
+                            f"Stiffness:          "
+                            f"{STIFFNESS_LIN:.2f} N/m"
+                        )
+                        print(
+                            f"Damping:            "
+                            f"{DAMPING_LIN:.2f} N/(m/s)"
+                        )
+                        print(
+                            f"Initial gap:        "
+                            f"{prev_gap_pos}"
+                        )
+                        print(
+                            f"Initial |gap|:      "
+                            f"{np.linalg.norm(prev_gap_pos):.6f} m"
+                        )
                         print("==========================================")
                         print()
 
                     elapsed = time.time() - loop_start
+
                     sleep_time = (
                         CONTROL_PERIOD_S - elapsed
                     )
@@ -223,17 +236,11 @@ def main():
                     1e-4
                 )
 
-                raw_gap_vel = (
+                gap_vel = (
                     gap_pos - prev_gap_pos
                 ) / dt
 
-                gap_vel = (
-                    VELOCITY_FILTER_ALPHA * raw_gap_vel
-                    + (1.0 - VELOCITY_FILTER_ALPHA) * prev_gap_vel
-                )
-
                 prev_gap_pos = gap_pos.copy()
-                prev_gap_vel = gap_vel.copy()
                 prev_time = now
 
                 spring_force = (
@@ -249,10 +256,16 @@ def main():
                     + damping_force
                 )
 
+                proxy_force_limited = np.clip(
+                    spring_force_on_proxy,
+                    -INTERNAL_MAX_FORCE,
+                    INTERNAL_MAX_FORCE
+                )
+
                 data.xfrc_applied[
                     sphere_id,
                     0:3
-                ] = spring_force_on_proxy
+                ] = proxy_force_limited
 
                 data.xfrc_applied[
                     sphere_id,
@@ -265,9 +278,8 @@ def main():
                 )
 
                 force_on_device_world = (
-                    -spring_force_on_proxy
+                    -proxy_force_limited
                 )
-
                 force_robot_frame = np.zeros(3)
 
                 mujoco.mju_rotVecQuat(
@@ -293,27 +305,69 @@ def main():
                 step_count += 1
 
                 if step_count % PRINT_EVERY_N_STEPS == 0:
+
                     print()
                     print("--------------- DEBUG ---------------")
-                    print(f"Step:               {step_count}")
-                    print(f"dt:                 {dt:.6f} s")
-                    print(f"Gap:                {gap_pos}")
-                    print(f"|Gap|:              {np.linalg.norm(gap_pos):.6f} m")
-                    print(f"Raw gap velocity:   {raw_gap_vel}")
-                    print(f"Raw |velocity|:     {np.linalg.norm(raw_gap_vel):.6f} m/s")
-                    print(f"Filtered velocity:  {gap_vel}")
-                    print(f"Filtered |velocity|:{np.linalg.norm(gap_vel):.6f} m/s")
-                    print(f"Spring force:       {spring_force}")
-                    print(f"Spring |F|:         {np.linalg.norm(spring_force):.4f} N")
-                    print(f"Damping force:      {damping_force}")
-                    print(f"Damping |F|:        {np.linalg.norm(damping_force):.4f} N")
-                    print(f"Total proxy force:  {spring_force_on_proxy}")
-                    print(f"Total |F|:          {np.linalg.norm(spring_force_on_proxy):.4f} N")
-                    print(f"Robot force:        {force_robot_limited}")
-                    print(f"Robot |F|:          {np.linalg.norm(force_robot_limited):.4f} N")
+                    print(
+                        f"Step:               "
+                        f"{step_count}"
+                    )
+                    print(
+                        f"dt:                 "
+                        f"{dt:.6f} s"
+                    )
+                    print(
+                        f"Gap:                "
+                        f"{gap_pos}"
+                    )
+                    print(
+                        f"|Gap|:              "
+                        f"{np.linalg.norm(gap_pos):.6f} m"
+                    )
+                    print(
+                        f"Gap velocity:       "
+                        f"{gap_vel}"
+                    )
+                    print(
+                        f"|velocity|:         "
+                        f"{np.linalg.norm(gap_vel):.6f} m/s"
+                    )
+                    print(
+                        f"Spring force:       "
+                        f"{spring_force}"
+                    )
+                    print(
+                        f"Spring |F|:         "
+                        f"{np.linalg.norm(spring_force):.4f} N"
+                    )
+                    print(
+                        f"Damping force:      "
+                        f"{damping_force}"
+                    )
+                    print(
+                        f"Damping |F|:        "
+                        f"{np.linalg.norm(damping_force):.4f} N"
+                    )
+                    print(
+                        f"Total proxy force:  "
+                        f"{spring_force_on_proxy}"
+                    )
+                    print(
+                        f"Total |F|:          "
+                        f"{np.linalg.norm(spring_force_on_proxy):.4f} N"
+                    )
+                    print(
+                        f"Robot force:        "
+                        f"{force_robot_limited}"
+                    )
+                    print(
+                        f"Robot |F|:          "
+                        f"{np.linalg.norm(force_robot_limited):.4f} N"
+                    )
                     print("--------------------------------------")
 
                 if step_count % RENDER_EVERY_N_STEPS == 0:
+
                     sphere_pos = (
                         data.xpos[sphere_id].copy()
                     )
@@ -337,6 +391,7 @@ def main():
                     time.sleep(sleep_time)
 
     finally:
+
         rtde_c.forceModeStop()
         rtde_c.stopScript()
 
