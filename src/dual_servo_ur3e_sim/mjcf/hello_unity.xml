@@ -15,11 +15,14 @@
     <geom type="plane" size="2 2 1" rgba="1 1 1 1" pos ="0 0 -0.02" />
     
     <!-- static target in the tip's pitch sweep (+y) -->
-<!--
+
+<!-- 
     <body name="tissue" pos="0.483 0.0115 0">
       <geom name="tissue" type="box" size="0.006 0.005 0.006" rgba="0.85 0.45 0.45 1"/>
     </body>
 -->
+    <!--End to take out the pink box to test collitions -->
+
     <body name="tool_main_insert_Shape_IndexedFaceSet.030" pos="0.0 0.0 0.0" quat="0.7071068286895752 0.7071067690849304 0.0 0.0">
       <geom type="mesh" name="tool_main_insert_Shape_IndexedFaceSet.030 geom" mesh="tool_main_insert_Shape_IndexedFaceSet.030" rgba="255.0 1.0 1.0 1.0"/>
 
