@@ -42,14 +42,17 @@ public static class DvrkToolBuilder
         var go = new GameObject(body.GetAttribute("name"));
         go.transform.SetParent(parent, false);
         go.transform.localPosition = ToUnity(ParseVec(body.GetAttribute("pos"), Vector3.zero));
-        go.transform.localRotation = ToUnity(ParseQuat(body.GetAttribute("quat")));
+        var rest = ToUnity(ParseQuat(body.GetAttribute("quat")));
+        go.transform.localRotation = rest;
 
         var joint = body.ChildNodes.OfType<XmlElement>().FirstOrDefault(e => e.Name == "joint");
         if (joint != null && joint.GetAttribute("type") == "hinge")
         {
+            // AddComponent runs DvrkJoint.OnValidate, which resets localRotation from a still-identity rest
             var j = go.AddComponent<DvrkJoint>();
             j.unityAxis = ToUnity(ParseVec(joint.GetAttribute("axis"), Vector3.forward)).normalized;
-            j.restLocalRotation = go.transform.localRotation;
+            j.restLocalRotation = rest;
+            go.transform.localRotation = rest;
             var range = joint.GetAttribute("range").Split(new[] { ' ' }, System.StringSplitOptions.RemoveEmptyEntries);
             if (range.Length == 2)
             {
@@ -73,6 +76,15 @@ public static class DvrkToolBuilder
 
         foreach (var child in body.ChildNodes.OfType<XmlElement>().Where(e => e.Name == "body"))
             BuildBody(child, go.transform, meshFiles, material);
+    }
+
+    // rest rotation of every body, in Unity frame, straight from the MJCF
+    public static System.Collections.Generic.Dictionary<string, Quaternion> RestRotations()
+    {
+        var doc = new XmlDocument();
+        doc.Load(MjcfPath);
+        return doc.SelectNodes("//body").Cast<XmlElement>()
+            .ToDictionary(b => b.GetAttribute("name"), b => ToUnity(ParseQuat(b.GetAttribute("quat"))));
     }
 
     static void DetectImporterFlipsX(string objFile)
