@@ -344,6 +344,20 @@ def main():
     data = mujoco.MjData(model)
     mapping = {k: (v[0], v[1] * args.scale) for k, v in DEFAULT_MAP.items()}
     teleop = Teleop(model, mapping)
+
+    # scenes may define a "home" keyframe (e.g. needle_grasp.xml: jaws open around the needle)
+    home = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_KEY, "home")
+
+    def reset():
+        if home >= 0:
+            mujoco.mj_resetDataKeyframe(model, data, home)
+        else:
+            mujoco.mj_resetData(model, data)
+        teleop.clutch = True
+        # start the jaw command where the scene left the jaws, or they snap shut on the first step
+        teleop.jaw = float(data.qpos[model.joint("joint_gripper_left").qposadr[0]])
+
+    reset()
     if args.demo:
         master, desc = DemoMaster(), "DEMO"
     elif args.robot_ip:
@@ -381,8 +395,7 @@ def main():
                 break
             if rx.reset:
                 rx.reset = False
-                mujoco.mj_resetData(model, data)
-                teleop.clutch, teleop.jaw = True, 0.0
+                reset()
                 t_start = wall0
 
             master.spin()

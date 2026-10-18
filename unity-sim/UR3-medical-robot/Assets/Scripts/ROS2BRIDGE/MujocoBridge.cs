@@ -63,6 +63,21 @@ public class MujocoBridge : MonoBehaviour
     public Color jawObjectColor = new Color(1f, 0.1f, 0.6f);
     public Color otherContactColor = new Color(1f, 0.9f, 0.1f);
 
+    [System.Serializable]
+    public class FreeBody
+    {
+        [Tooltip("Nombre del body en MuJoCo, p. ej. needle")]
+        public string mujocoBody;
+        [Tooltip("Objeto que sigue a ese body. La malla va en un HIJO (lo que crea arrastrar el .obj); " +
+                 "se rota del marco OBJ al marco MuJoCo igual que la pinza.")]
+        public Transform target;
+    }
+
+    [Header("Objetos libres (aguja, etc.)")]
+    [Tooltip("Bodies con freejoint que no son parte de la pinza. Su malla debe tener el origen en el body " +
+             "(needle_gen.py ya la genera así).")]
+    public FreeBody[] freeBodies;
+
     [Header("Maestro (opcional)")]
     public UR3Controller masterView;
 
@@ -199,6 +214,22 @@ public class MujocoBridge : MonoBehaviour
                 nMesh++;
             }
             log.Add($"{key} → {L.t.name} ({nMesh} malla){Shift(shift)}");
+        }
+        foreach (var fb in freeBodies ?? new FreeBody[0])
+        {
+            if (fb.target == null) continue;
+            if (fb.target.GetComponent<MeshFilter>() != null)
+                Debug.LogWarning($"[MujocoBridge] {fb.mujocoBody}: pon la malla en un hijo de {fb.target.name}, no en el mismo objeto");
+            int nMesh = 0;
+            foreach (Transform c in fb.target)
+            {
+                if (c.GetComponentInChildren<MeshFilter>(true) == null) continue;
+                c.localPosition = Vector3.zero;
+                c.localRotation = MeshRot;
+                c.localScale = MeshScale;
+                nMesh++;
+            }
+            log.Add($"{fb.mujocoBody} → {fb.target.name} (libre, {nMesh} malla)");
         }
         bound = true;
         Debug.Log($"[MujocoBridge] enlazados {links.Count}/{Order.Length}:\n  " + string.Join("\n  ", log));
@@ -365,6 +396,13 @@ public class MujocoBridge : MonoBehaviour
                                      new Quaternion((float)a[3], (float)a[4], (float)a[5], (float)a[6]));
                     break;
                 }
+        foreach (var fb in freeBodies ?? new FreeBody[0])
+            if (fb.target != null && bodies[fb.mujocoBody] is JArray fa)
+            {
+                Read(fa, out Vector3 p, out Quaternion q);
+                fb.target.position = transform.TransformPoint(p);
+                fb.target.rotation = transform.rotation * q;
+            }
         int shown = UpdateContacts((JArray)st["contacts"]);
         UpdateHighlight();
 

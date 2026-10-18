@@ -1,0 +1,36 @@
+<!-- dVRK Large Needle Driver + suture needle resting on a stand, tail between the jaws.
+     Run: python3 mujoco_unity_bridge.py (model arg) ../mjcf/needle_grasp.xml
+     Jaws open/close along world Z around x = 482 mm, so the needle lies flat
+     at z = 0 with only its tail (~3 mm) overhanging the stand into the jaw gap. -->
+<mujoco model="needle_grasp">
+  <include file="hello_unity.xml"/>
+  <include file="needle/needle_assets.xml"/>
+
+  <!-- Overrides hello_unity.xml: the needle's contact solref (1 ms) needs
+       timestep <= 0.5 ms; elliptic cones + impratio keep the grasp from slipping. -->
+  <option timestep="0.0005" integrator="implicitfast" cone="elliptic" impratio="10" noslip_iterations="5"/>
+
+  <visual>
+    <map znear="0.001"/>
+  </visual>
+
+  <worldbody>
+    <!-- Starts past the jaw tips (x = 484.5 mm) so the jaws never hit it;
+         top at z = -0.3 mm = wire radius, so the needle rests centred in the gap. -->
+    <geom name="needle_stand" type="box" pos="0.4924 0.0075 -0.01015" size="0.0076 0.0125 0.00985"
+          rgba="0.25 0.45 0.55 1"/>
+
+    <!-- Rotated -90 deg about Z: the tail's tangent points along +X, out of the jaws. -->
+    <frame pos="0.482 0.00776 0" quat="0.7071068 0 0 -0.7071068">
+      <include file="needle/needle_body.xml"/>
+    </frame>
+  </worldbody>
+
+  <!-- Bridge loads "home" on start and on reset: jaws open around the needle tail.
+       qpos = roll pitch jaw_left jaw_right | needle x y z qw qx qy qz -->
+  <keyframe>
+    <key name="home"
+         qpos="0 0 0.5 0.5  0.482 0.00776 0 0.7071068 0 0 -0.7071068"
+         ctrl="0 0 0.5 0.5"/>
+  </keyframe>
+</mujoco>
