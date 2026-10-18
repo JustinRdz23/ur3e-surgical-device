@@ -14,6 +14,7 @@
   <depend>geometry_msgs</depend>
   <depend>control_msgs</depend>
   <depend>moveit_msgs</depend>
+<depend>ament_index_cpp</depend>
 
   <!-- Needed at launch time: xacro processing, description/driver packages
        referenced via $(find ...) in the xacro files, and the nodes started
