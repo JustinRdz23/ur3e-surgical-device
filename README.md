@@ -16,9 +16,3 @@ Dual-arm **UR3e** robotic cell (*Justi* and *Gracie*) for surgical teleoperation
 ## Requirements
 
 ROS 2, `ur_robot_driver`, `ur_description` and MoveIt. The simulation also needs Python with `mujoco` and Unity 6.
-
-## Branches
-
-- `main`: dual cell in ROS 2.
-- `implementationUnity`: MuJoCo + Unity simulation, not yet merged into `main`.
-- `*-objectCreation`: simulation objects (needle, ring).
