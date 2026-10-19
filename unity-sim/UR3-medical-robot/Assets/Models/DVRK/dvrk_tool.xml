@@ -1,5 +1,5 @@
 <mujoco model="dvrk_large_needle_driver">
-  <compiler angle = "degree" meshdir="/home/justinrc/workspace/src/dual_servo_ur3e_sim/mesh/high_res"/>
+  <compiler angle = "degree" meshdir="/home/xpatricia-garcia/repos/medicalUR/ur3e-surgical-device/src/dual_servo_ur3e_sim/mesh/high_res"/>
   <worldbody>
     <light diffuse=".5 .5 .5" pos="0 0 10" dir="0 0 -1"/>
     <geom type="plane" size="2 2 1" rgba="1 1 1 1" pos ="0 0 -0.02" />
