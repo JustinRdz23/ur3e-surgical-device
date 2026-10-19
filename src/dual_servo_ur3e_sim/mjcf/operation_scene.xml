@@ -1,5 +1,7 @@
 <mujoco model="dvrk_large_needle_driver">
-  <compiler angle="degree" meshdir="/home/joshu/ur3e-surgical-device/src/dual_servo_ur3e_sim/mesh/high_res" fitaabb="true"/>
+  <compiler angle="degree"
+          meshdir="../mesh/high_res"
+          fitaabb="true"/>
 
   <option timestep="0.0005"
           gravity="0 0 -9.81"
@@ -40,64 +42,168 @@
 
     <body name="operation_board_body" pos="0.15 -0.25 0">
 
+      <!-- Visual model -->
+      <geom name="operation_board_visual"
+            type="mesh"
+            mesh="operation_board"
+            rgba="0.35 0.35 0.35 1"
+            contype="0"
+            conaffinity="0"/>
+
+      <!-- Pocket floors -->
+
+      <geom name="adams_apple_pocket_floor"
+            type="box"
+            pos="0.02118215 0.08143750 0.0075"
+            size="0.015 0.015 0.005"
+            rgba="0 0 1 0.30"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="brain_freeze_pocket_floor"
+            type="box"
+            pos="0.01583348 0.05276779 0.0075"
+            size="0.015 0.015 0.005"
+            rgba="0 0 1 0.30"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="bread_basket_pocket_floor"
+            type="box"
+            pos="0.01930766 0.01542859 0.0075"
+            size="0.015 0.015 0.005"
+            rgba="0 0 1 0.30"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
       <geom name="broken_heart_pocket_floor"
-        type="box"
-        pos="0.046117 0.029368 0.0075"
-        size="0.009 0.009 0.005"
-        rgba="0 0 1 0.30"
-        friction="1 0.005 0.0001"
-        solref="0.002 1"
-        solimp="0.95 0.99 0.001"
-        condim="3"
-        contype="1"
-        conaffinity="1"/>
+            type="box"
+            pos="0.04611706 0.02936794 0.0075"
+            size="0.015 0.015 0.005"
+            rgba="0 0 1 0.30"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
 
-      <!-- Modelo visual -->
-      <geom
-          name="operation_board_visual"
-          type="mesh"
-          mesh="operation_board"
-          rgba="0.35 0.35 0.35 1"
-          contype="0"
-          conaffinity="0"/>
+      <geom name="butterflies_in_stomach_pocket_floor"
+            type="box"
+            pos="0.04438988 0.05860327 0.0075"
+            size="0.015 0.015 0.005"
+            rgba="0 0 1 0.30"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
 
-      <!-- COLLIDERS TEMPORALES DE LA SUPERFICIE -->
+      <geom name="charlie_horse_pocket_floor"
+            type="box"
+            pos="0.05877073 0.08435925 0.0075"
+            size="0.015 0.015 0.005"
+            rgba="0 0 1 0.30"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
 
-      <!-- Zona izquierda -->
-      <geom
-          name="board_left"
-          type="box"
-          pos="0.018059 0.050000 0.0075"
-          size="0.018059 0.050000 0.0075"
-          rgba="0 1 0 0.25"/>
+      <geom name="funny_bone_pocket_floor"
+            type="box"
+            pos="0.09521574 0.08353171 0.0075"
+            size="0.015 0.015 0.005"
+            rgba="0 0 1 0.30"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
 
-      <geom
-          name="board_right"
-          type="box"
-          pos="0.103059 0.050000 0.0075"
-          size="0.046941 0.050000 0.0075"
-          rgba="0 1 0 0.25"/>
+      <geom name="spare_ribs_pocket_floor"
+            type="box"
+            pos="0.07742675 0.05415378 0.0075"
+            size="0.015 0.015 0.005"
+            rgba="0 0 1 0.30"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
 
-      <geom
-          name="board_bottom"
-          type="box"
-          pos="0.046117 0.009684 0.0075"
-          size="0.010000 0.009684 0.0075"
-          rgba="0 1 0 0.25"/>
+      <geom name="water_on_the_knee_pocket_floor"
+            type="box"
+            pos="0.08400412 0.01836335 0.0075"
+            size="0.015 0.015 0.005"
+            rgba="0 0 1 0.30"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
 
-      <geom
-          name="board_top"
-          type="box"
-          pos="0.046117 0.069684 0.0075"
-          size="0.010000 0.030316 0.0075"
-          rgba="0 1 0 0.25"/>
+      <geom name="wish_bone_pocket_floor"
+            type="box"
+            pos="0.12292060 0.06354729 0.0075"
+            size="0.015 0.015 0.005"
+            rgba="0 0 1 0.30"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="wrenched_ankle_pocket_floor"
+            type="box"
+            pos="0.10542619 0.03786350 0.0075"
+            size="0.015 0.015 0.005"
+            rgba="0 0 1 0.30"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="writers_cramp_pocket_floor"
+            type="box"
+            pos="0.13294274 0.02068023 0.0075"
+            size="0.015 0.015 0.005"
+            rgba="0 0 1 0.30"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
 
     </body>
 
-    <!-- Operation pieces --> 
+    <!-- Operation pieces -->
 
-    <body name="adams_apple_body" pos="-0.45 -0.24 0.10">
+    <body name="adams_apple_body"
+          pos="0.15310417 -0.15546625 0.01260000">
       <freejoint/>
+
       <geom name="adams_apple_visual"
             type="mesh"
             mesh="adams_apple"
@@ -105,15 +211,25 @@
             contype="0"
             conaffinity="0"
             mass="0"/>
+
       <geom name="adams_apple_collision"
             type="box"
             mesh="adams_apple"
             rgba="0 1 0 0.25"
-            mass="0.03"/>
+            mass="0.03"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
     </body>
 
-    <body name="brain_freeze_body" pos="-0.30 -0.24 0.10">
+
+    <body name="brain_freeze_body"
+          pos="0.20990063 -0.16282621 0.01260000">
       <freejoint/>
+
       <geom name="brain_freeze_visual"
             type="mesh"
             mesh="brain_freeze"
@@ -121,15 +237,25 @@
             contype="0"
             conaffinity="0"
             mass="0"/>
+
       <geom name="brain_freeze_collision"
             type="box"
             mesh="brain_freeze"
             rgba="0 1 0 0.25"
-            mass="0.03"/>
+            mass="0.03"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
     </body>
 
-    <body name="bread_basket_body" pos="-0.15 -0.24 0.10">
+
+    <body name="bread_basket_body"
+          pos="0.21682600 -0.24287435 0.01260000">
       <freejoint/>
+
       <geom name="bread_basket_visual"
             type="mesh"
             mesh="bread_basket"
@@ -137,14 +263,23 @@
             contype="0"
             conaffinity="0"
             mass="0"/>
+
       <geom name="bread_basket_collision"
             type="box"
             mesh="bread_basket"
             rgba="0 1 0 0.25"
-            mass="0.03"/>
+            mass="0.03"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
     </body>
 
-    <body name="broken_heart_body" pos="0.179976 -0.229430 0.0126">
+
+    <body name="broken_heart_body"
+          pos="0.17997609 -0.22943027 0.01260000">
       <freejoint/>
 
       <geom name="broken_heart_visual"
@@ -156,23 +291,23 @@
             mass="0"/>
 
       <geom name="broken_heart_collision"
-        type="box"
-        mesh="broken_heart"
-        rgba="0 1 0 0.25"
-        mass="0.03"
-        friction="1 0.005 0.0001"
-        solref="0.002 1"
-        solimp="0.95 0.99 0.001"
-        condim="3"
-        contype="1"
-        conaffinity="1"/>
-
+            type="box"
+            mesh="broken_heart"
+            rgba="0 1 0 0.25"
+            mass="0.03"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
     </body>
 
-    
 
-    <body name="butterflies_in_stomach_body" pos="-0.30 -0.08 0.10">
+    <body name="butterflies_in_stomach_body"
+          pos="0.19582719 -0.17730241 0.01267471">
       <freejoint/>
+
       <geom name="butterflies_in_stomach_visual"
             type="mesh"
             mesh="butterflies_in_stomach"
@@ -180,15 +315,25 @@
             contype="0"
             conaffinity="0"
             mass="0"/>
+
       <geom name="butterflies_in_stomach_collision"
             type="box"
             mesh="butterflies_in_stomach"
             rgba="0 1 0 0.25"
-            mass="0.03"/>
+            mass="0.03"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
     </body>
 
-    <body name="charlie_horse_body" pos="-0.15 -0.08 0.10">
+
+    <body name="charlie_horse_body"
+          pos="0.23423193 -0.17419128 0.01260000">
       <freejoint/>
+
       <geom name="charlie_horse_visual"
             type="mesh"
             mesh="charlie_horse"
@@ -196,15 +341,25 @@
             contype="0"
             conaffinity="0"
             mass="0"/>
+
       <geom name="charlie_horse_collision"
             type="box"
             mesh="charlie_horse"
             rgba="0 1 0 0.25"
-            mass="0.03"/>
+            mass="0.03"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
     </body>
 
-    <body name="funny_bone_body" pos="-0.45 0.08 0.10">
+
+    <body name="funny_bone_body"
+          pos="0.21018266 -0.17708883 0.01260000">
       <freejoint/>
+
       <geom name="funny_bone_visual"
             type="mesh"
             mesh="funny_bone"
@@ -212,15 +367,25 @@
             contype="0"
             conaffinity="0"
             mass="0"/>
+
       <geom name="funny_bone_collision"
             type="box"
             mesh="funny_bone"
             rgba="0 1 0 0.25"
-            mass="0.03"/>
+            mass="0.03"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
     </body>
 
-    <body name="spare_ribs_body" pos="-0.30 0.08 0.10">
+
+    <body name="spare_ribs_body"
+          pos="0.19067239 -0.18475781 0.01341348">
       <freejoint/>
+
       <geom name="spare_ribs_visual"
             type="mesh"
             mesh="spare_ribs"
@@ -228,15 +393,25 @@
             contype="0"
             conaffinity="0"
             mass="0"/>
+
       <geom name="spare_ribs_collision"
             type="box"
             mesh="spare_ribs"
             rgba="0 1 0 0.25"
-            mass="0.03"/>
+            mass="0.03"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
     </body>
 
-    <body name="water_on_the_knee_body" pos="-0.15 0.08 0.10">
+
+    <body name="water_on_the_knee_body"
+          pos="0.25931609 -0.21898934 0.01260000">
       <freejoint/>
+
       <geom name="water_on_the_knee_visual"
             type="mesh"
             mesh="water_on_the_knee"
@@ -244,15 +419,25 @@
             contype="0"
             conaffinity="0"
             mass="0"/>
+
       <geom name="water_on_the_knee_collision"
             type="box"
             mesh="water_on_the_knee"
             rgba="0 1 0 0.25"
-            mass="0.03"/>
+            mass="0.03"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
     </body>
 
-    <body name="wish_bone_body" pos="-0.45 0.24 0.10">
+
+    <body name="wish_bone_body"
+          pos="0.31803175 -0.17729840 0.01260000">
       <freejoint/>
+
       <geom name="wish_bone_visual"
             type="mesh"
             mesh="wish_bone"
@@ -260,15 +445,25 @@
             contype="0"
             conaffinity="0"
             mass="0"/>
+
       <geom name="wish_bone_collision"
             type="box"
             mesh="wish_bone"
             rgba="0 1 0 0.25"
-            mass="0.03"/>
+            mass="0.03"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
     </body>
 
-    <body name="wrenched_ankle_body" pos="-0.30 0.24 0.10">
+
+    <body name="wrenched_ankle_body"
+          pos="0.26017901 -0.22128007 0.01260000">
       <freejoint/>
+
       <geom name="wrenched_ankle_visual"
             type="mesh"
             mesh="wrenched_ankle"
@@ -276,15 +471,25 @@
             contype="0"
             conaffinity="0"
             mass="0"/>
+
       <geom name="wrenched_ankle_collision"
             type="box"
             mesh="wrenched_ankle"
             rgba="0 1 0 0.25"
-            mass="0.03"/>
+            mass="0.03"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
     </body>
 
-    <body name="writers_cramp_body" pos="-0.15 0.24 0.10">
+
+    <body name="writers_cramp_body"
+          pos="0.23159668 -0.22801905 0.01295042">
       <freejoint/>
+
       <geom name="writers_cramp_visual"
             type="mesh"
             mesh="writers_cramp"
@@ -292,11 +497,18 @@
             contype="0"
             conaffinity="0"
             mass="0"/>
+
       <geom name="writers_cramp_collision"
             type="box"
             mesh="writers_cramp"
             rgba="0 1 0 0.25"
-            mass="0.03"/>
+            mass="0.03"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
     </body>
 
     <!-- Tool -->
