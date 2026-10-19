@@ -32,6 +32,115 @@
       <mesh name="wrenched_ankle" file="Wrenched_Ankle.stl" scale="0.001 0.001 0.001"/>
       <mesh name="writers_cramp" file="Writers_Cramp.stl" scale="0.001 0.001 0.001"/>
 
+      <!-- Convex collision decomposition -->
+      <mesh name="wish_bone_col_01"
+            file="wish_bone_collision/Wish_Bone_col_01.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="wish_bone_col_02"
+            file="wish_bone_collision/Wish_Bone_col_02.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="wish_bone_col_03"
+            file="wish_bone_collision/Wish_Bone_col_03.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="wish_bone_col_04"
+            file="wish_bone_collision/Wish_Bone_col_04.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="wish_bone_col_05"
+            file="wish_bone_collision/Wish_Bone_col_05.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="wish_bone_col_06"
+            file="wish_bone_collision/Wish_Bone_col_06.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="wish_bone_col_07"
+            file="wish_bone_collision/Wish_Bone_col_07.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="charlie_horse_col_01"
+            file="charlie_horse_collision/Charlie_Horse_col_01.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="charlie_horse_col_02"
+            file="charlie_horse_collision/Charlie_Horse_col_02.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="charlie_horse_col_03"
+            file="charlie_horse_collision/Charlie_Horse_col_03.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="charlie_horse_col_04"
+            file="charlie_horse_collision/Charlie_Horse_col_04.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="charlie_horse_col_05"
+            file="charlie_horse_collision/Charlie_Horse_col_05.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="charlie_horse_col_06"
+            file="charlie_horse_collision/Charlie_Horse_col_06.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="charlie_horse_col_07"
+            file="charlie_horse_collision/Charlie_Horse_col_07.obj"
+            scale="0.001 0.001 0.001"/>
+      
+      <mesh name="wrenched_ankle_col_01"
+            file="wrenched_ankle_collision/Wrenched_Ankle_col_01.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="wrenched_ankle_col_02"
+            file="wrenched_ankle_collision/Wrenched_Ankle_col_02.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="wrenched_ankle_col_03"
+            file="wrenched_ankle_collision/Wrenched_Ankle_col_03.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="wrenched_ankle_col_04"
+            file="wrenched_ankle_collision/Wrenched_Ankle_col_04.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="wrenched_ankle_col_05"
+            file="wrenched_ankle_collision/Wrenched_Ankle_col_05.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="wrenched_ankle_col_06"
+            file="wrenched_ankle_collision/Wrenched_Ankle_col_06.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="wrenched_ankle_col_07"
+            file="wrenched_ankle_collision/Wrenched_Ankle_col_07.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="wrenched_ankle_col_08"
+            file="wrenched_ankle_collision/Wrenched_Ankle_col_08.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="wrenched_ankle_col_09"
+            file="wrenched_ankle_collision/Wrenched_Ankle_col_09.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="wrenched_ankle_col_10"
+            file="wrenched_ankle_collision/Wrenched_Ankle_col_10.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="wrenched_ankle_col_11"
+            file="wrenched_ankle_collision/Wrenched_Ankle_col_11.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="wrenched_ankle_col_12"
+            file="wrenched_ankle_collision/Wrenched_Ankle_col_12.obj"
+            scale="0.001 0.001 0.001"/>
+
+      <mesh name="wrenched_ankle_col_13"
+            file="wrenched_ankle_collision/Wrenched_Ankle_col_13.obj"
+            scale="0.001 0.001 0.001"/>
+
   </asset>
 
   <worldbody>
@@ -213,16 +322,16 @@
             mass="0"/>
 
       <geom name="adams_apple_collision"
-            type="box"
-            mesh="adams_apple"
-            rgba="0 1 0 0.25"
-            mass="0.03"
-            friction="1 0.005 0.0001"
-            solref="0.002 1"
-            solimp="0.95 0.99 0.001"
-            condim="3"
-            contype="1"
-            conaffinity="1"/>
+        type="mesh"
+        mesh="adams_apple"
+        rgba="0 1 0 0.25"
+        mass="0.03"
+        friction="1 0.005 0.0001"
+        solref="0.002 1"
+        solimp="0.95 0.99 0.001"
+        condim="3"
+        contype="1"
+        conaffinity="1"/>
     </body>
 
 
@@ -239,16 +348,16 @@
             mass="0"/>
 
       <geom name="brain_freeze_collision"
-            type="box"
-            mesh="brain_freeze"
-            rgba="0 1 0 0.25"
-            mass="0.03"
-            friction="1 0.005 0.0001"
-            solref="0.002 1"
-            solimp="0.95 0.99 0.001"
-            condim="3"
-            contype="1"
-            conaffinity="1"/>
+        type="mesh"
+        mesh="brain_freeze"
+        rgba="0 1 0 0.25"
+        mass="0.03"
+        friction="1 0.005 0.0001"
+        solref="0.002 1"
+        solimp="0.95 0.99 0.001"
+        condim="3"
+        contype="1"
+        conaffinity="1"/>
     </body>
 
 
@@ -265,16 +374,16 @@
             mass="0"/>
 
       <geom name="bread_basket_collision"
-            type="box"
-            mesh="bread_basket"
-            rgba="0 1 0 0.25"
-            mass="0.03"
-            friction="1 0.005 0.0001"
-            solref="0.002 1"
-            solimp="0.95 0.99 0.001"
-            condim="3"
-            contype="1"
-            conaffinity="1"/>
+        type="mesh"
+        mesh="bread_basket"
+        rgba="0 1 0 0.25"
+        mass="0.03"
+        friction="1 0.005 0.0001"
+        solref="0.002 1"
+        solimp="0.95 0.99 0.001"
+        condim="3"
+        contype="1"
+        conaffinity="1"/>
     </body>
 
 
@@ -291,16 +400,16 @@
             mass="0"/>
 
       <geom name="broken_heart_collision"
-            type="box"
-            mesh="broken_heart"
-            rgba="0 1 0 0.25"
-            mass="0.03"
-            friction="1 0.005 0.0001"
-            solref="0.002 1"
-            solimp="0.95 0.99 0.001"
-            condim="3"
-            contype="1"
-            conaffinity="1"/>
+        type="mesh"
+        mesh="broken_heart"
+        rgba="0 1 0 0.25"
+        mass="0.03"
+        friction="1 0.005 0.0001"
+        solref="0.002 1"
+        solimp="0.95 0.99 0.001"
+        condim="3"
+        contype="1"
+        conaffinity="1"/>
     </body>
 
 
@@ -317,16 +426,16 @@
             mass="0"/>
 
       <geom name="butterflies_in_stomach_collision"
-            type="box"
-            mesh="butterflies_in_stomach"
-            rgba="0 1 0 0.25"
-            mass="0.03"
-            friction="1 0.005 0.0001"
-            solref="0.002 1"
-            solimp="0.95 0.99 0.001"
-            condim="3"
-            contype="1"
-            conaffinity="1"/>
+        type="mesh"
+        mesh="butterflies_in_stomach"
+        rgba="0 1 0 0.25"
+        mass="0.03"
+        friction="1 0.005 0.0001"
+        solref="0.002 1"
+        solimp="0.95 0.99 0.001"
+        condim="3"
+        contype="1"
+        conaffinity="1"/>
     </body>
 
 
@@ -342,11 +451,83 @@
             conaffinity="0"
             mass="0"/>
 
-      <geom name="charlie_horse_collision"
-            type="box"
-            mesh="charlie_horse"
-            rgba="0 1 0 0.25"
-            mass="0.03"
+      <geom name="charlie_horse_collision_01"
+            type="mesh"
+            mesh="charlie_horse_col_01"
+            rgba="1 0 0 0.45"
+            mass="0.00712317"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="charlie_horse_collision_02"
+            type="mesh"
+            mesh="charlie_horse_col_02"
+            rgba="0 1 0 0.45"
+            mass="0.00522588"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="charlie_horse_collision_03"
+            type="mesh"
+            mesh="charlie_horse_col_03"
+            rgba="0 0 1 0.45"
+            mass="0.00580626"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="charlie_horse_collision_04"
+            type="mesh"
+            mesh="charlie_horse_col_04"
+            rgba="1 1 0 0.45"
+            mass="0.00252202"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="charlie_horse_collision_05"
+            type="mesh"
+            mesh="charlie_horse_col_05"
+            rgba="1 0 1 0.45"
+            mass="0.00263920"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="charlie_horse_collision_06"
+            type="mesh"
+            mesh="charlie_horse_col_06"
+            rgba="0 1 1 0.45"
+            mass="0.00402321"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="charlie_horse_collision_07"
+            type="mesh"
+            mesh="charlie_horse_col_07"
+            rgba="1 0.5 0 0.45"
+            mass="0.00266026"
             friction="1 0.005 0.0001"
             solref="0.002 1"
             solimp="0.95 0.99 0.001"
@@ -369,16 +550,16 @@
             mass="0"/>
 
       <geom name="funny_bone_collision"
-            type="box"
-            mesh="funny_bone"
-            rgba="0 1 0 0.25"
-            mass="0.03"
-            friction="1 0.005 0.0001"
-            solref="0.002 1"
-            solimp="0.95 0.99 0.001"
-            condim="3"
-            contype="1"
-            conaffinity="1"/>
+        type="mesh"
+        mesh="funny_bone"
+        rgba="0 1 0 0.25"
+        mass="0.03"
+        friction="1 0.005 0.0001"
+        solref="0.002 1"
+        solimp="0.95 0.99 0.001"
+        condim="3"
+        contype="1"
+        conaffinity="1"/>
     </body>
 
 
@@ -395,16 +576,16 @@
             mass="0"/>
 
       <geom name="spare_ribs_collision"
-            type="box"
-            mesh="spare_ribs"
-            rgba="0 1 0 0.25"
-            mass="0.03"
-            friction="1 0.005 0.0001"
-            solref="0.002 1"
-            solimp="0.95 0.99 0.001"
-            condim="3"
-            contype="1"
-            conaffinity="1"/>
+        type="mesh"
+        mesh="spare_ribs"
+        rgba="0 1 0 0.25"
+        mass="0.03"
+        friction="1 0.005 0.0001"
+        solref="0.002 1"
+        solimp="0.95 0.99 0.001"
+        condim="3"
+        contype="1"
+        conaffinity="1"/>
     </body>
 
 
@@ -421,21 +602,22 @@
             mass="0"/>
 
       <geom name="water_on_the_knee_collision"
-            type="box"
-            mesh="water_on_the_knee"
-            rgba="0 1 0 0.25"
-            mass="0.03"
-            friction="1 0.005 0.0001"
-            solref="0.002 1"
-            solimp="0.95 0.99 0.001"
-            condim="3"
-            contype="1"
-            conaffinity="1"/>
+        type="mesh"
+        mesh="water_on_the_knee"
+        rgba="0 1 0 0.25"
+        mass="0.03"
+        friction="1 0.005 0.0001"
+        solref="0.002 1"
+        solimp="0.95 0.99 0.001"
+        condim="3"
+        contype="1"
+        conaffinity="1"/>
     </body>
 
 
     <body name="wish_bone_body"
-          pos="0.31803175 -0.17729840 0.01260000">
+      pos="0.31803175 -0.17729840 0.01260000">
+
       <freejoint/>
 
       <geom name="wish_bone_visual"
@@ -446,18 +628,94 @@
             conaffinity="0"
             mass="0"/>
 
-      <geom name="wish_bone_collision"
-            type="box"
-            mesh="wish_bone"
-            rgba="0 1 0 0.25"
-            mass="0.03"
+        <!-- Wish Bone convex compound collider -->
+
+      <geom name="wish_bone_collision_01"
+            type="mesh"
+            mesh="wish_bone_col_01"
+            rgba="1 0 0 0.45"
+            mass="0.00562392"
             friction="1 0.005 0.0001"
             solref="0.002 1"
             solimp="0.95 0.99 0.001"
             condim="3"
             contype="1"
             conaffinity="1"/>
+
+      <geom name="wish_bone_collision_02"
+            type="mesh"
+            mesh="wish_bone_col_02"
+            rgba="0 1 0 0.45"
+            mass="0.00685779"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="wish_bone_collision_03"
+            type="mesh"
+            mesh="wish_bone_col_03"
+            rgba="0 0 1 0.45"
+            mass="0.00275044"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="wish_bone_collision_04"
+            type="mesh"
+            mesh="wish_bone_col_04"
+            rgba="1 1 0 0.45"
+            mass="0.00410472"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="wish_bone_collision_05"
+            type="mesh"
+            mesh="wish_bone_col_05"
+            rgba="1 0 1 0.45"
+            mass="0.00274194"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="wish_bone_collision_06"
+            type="mesh"
+            mesh="wish_bone_col_06"
+            rgba="0 1 1 0.45"
+            mass="0.00575336"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="wish_bone_collision_07"
+            type="mesh"
+            mesh="wish_bone_col_07"
+            rgba="1 0.5 0 0.45"
+            mass="0.00216784"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
     </body>
+
 
 
     <body name="wrenched_ankle_body"
@@ -472,11 +730,155 @@
             conaffinity="0"
             mass="0"/>
 
-      <geom name="wrenched_ankle_collision"
-            type="box"
-            mesh="wrenched_ankle"
-            rgba="0 1 0 0.25"
-            mass="0.03"
+      <geom name="wrenched_ankle_collision_01"
+            type="mesh"
+            mesh="wrenched_ankle_col_01"
+            rgba="1 0 0 0.45"
+            mass="0.00164408"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="wrenched_ankle_collision_02"
+            type="mesh"
+            mesh="wrenched_ankle_col_02"
+            rgba="0 1 0 0.45"
+            mass="0.00472613"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="wrenched_ankle_collision_03"
+            type="mesh"
+            mesh="wrenched_ankle_col_03"
+            rgba="0 0 1 0.45"
+            mass="0.00169546"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="wrenched_ankle_collision_04"
+            type="mesh"
+            mesh="wrenched_ankle_col_04"
+            rgba="1 1 0 0.45"
+            mass="0.00213026"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="wrenched_ankle_collision_05"
+            type="mesh"
+            mesh="wrenched_ankle_col_05"
+            rgba="1 0 1 0.45"
+            mass="0.00451197"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="wrenched_ankle_collision_06"
+            type="mesh"
+            mesh="wrenched_ankle_col_06"
+            rgba="0 1 1 0.45"
+            mass="0.00171209"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="wrenched_ankle_collision_07"
+            type="mesh"
+            mesh="wrenched_ankle_col_07"
+            rgba="1 0.5 0 0.45"
+            mass="0.00135301"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="wrenched_ankle_collision_08"
+            type="mesh"
+            mesh="wrenched_ankle_col_08"
+            rgba="0.5 0 1 0.45"
+            mass="0.00063382"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="wrenched_ankle_collision_09"
+            type="mesh"
+            mesh="wrenched_ankle_col_09"
+            rgba="0.5 1 0 0.45"
+            mass="0.00324500"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="wrenched_ankle_collision_10"
+            type="mesh"
+            mesh="wrenched_ankle_col_10"
+            rgba="1 0 0.5 0.45"
+            mass="0.00420937"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="wrenched_ankle_collision_11"
+            type="mesh"
+            mesh="wrenched_ankle_col_11"
+            rgba="0 0.5 1 0.45"
+            mass="0.00074303"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="wrenched_ankle_collision_12"
+            type="mesh"
+            mesh="wrenched_ankle_col_12"
+            rgba="1 0.5 0.5 0.45"
+            mass="0.00185371"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="wrenched_ankle_collision_13"
+            type="mesh"
+            mesh="wrenched_ankle_col_13"
+            rgba="0.5 1 1 0.45"
+            mass="0.00154208"
             friction="1 0.005 0.0001"
             solref="0.002 1"
             solimp="0.95 0.99 0.001"
