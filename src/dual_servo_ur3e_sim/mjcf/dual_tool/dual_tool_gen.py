@@ -52,6 +52,10 @@ CAM_POS = (0.0, -0.15, 0.13)
 CAM_TARGET = (0.0, 0.0, 0.0)
 CAM_FOVY = 50.0
 
+# ---- Unity meshes ----------------------------------------------------------
+# Faces meeting at more than this angle keep a hard edge; flatter ones are smoothed.
+CREASE_ANGLE_DEG = 30.0
+
 GEN_DIR = Path(__file__).resolve().parent
 MJCF_DIR = GEN_DIR.parent
 REPO_ROOT = MJCF_DIR.parents[2]
@@ -145,6 +149,29 @@ def measure_board(m):
     return np.array([(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2]), lo[2], float(np.median(piece_tops)), hi - lo
 
 
+def crease_normals(v, f, crease_deg=CREASE_ANGLE_DEG):
+    """Per-corner normals: average the normals of the faces around each vertex,
+    but only those within crease_deg of the corner's own face. MuJoCo (and
+    Unity's import) keep one normal per vertex, which on these extruded pieces
+    bends the 90-degree top/wall edges into dark streaks."""
+    fn = np.cross(v[f[:, 1]] - v[f[:, 0]], v[f[:, 2]] - v[f[:, 0]])  # area-weighted
+    unit = fn / np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-30)
+    around = [[] for _ in range(len(v))]
+    for i, face in enumerate(f):
+        for vi in face:
+            around[vi].append(i)
+    cos_t = np.cos(np.radians(crease_deg))
+    corner = np.zeros((len(f), 3, 3))
+    for i, face in enumerate(f):
+        for c, vi in enumerate(face):
+            near = [j for j in around[vi] if unit[j] @ unit[i] >= cos_t]
+            n = fn[near].sum(0)
+            corner[i, c] = n / max(np.linalg.norm(n), 1e-30)
+    # Deduplicate so the OBJ stays small.
+    keys, index = np.unique(np.round(corner.reshape(-1, 3), 5), axis=0, return_inverse=True)
+    return keys, index.reshape(len(f), 3)
+
+
 def export_unity_meshes(m):
     """One OBJ (+ MTL with the geom colour) per body, from its visual mesh geoms.
 
@@ -163,19 +190,23 @@ def export_unity_meshes(m):
         R = np.zeros(9)
         with open(obj, "w") as fo, open(mtl, "w") as fm:
             fo.write(f"# dual_tool_gen.py — {name}: MuJoCo body frame (Z-up), metres\nmtllib {mtl.name}\n")
-            base = 1
+            base = nbase = 1
             for g in geoms:
                 k = m.geom_dataid[g]
                 mujoco.mju_quat2Mat(R, m.geom_quat[g])
                 v = m.mesh_vert[m.mesh_vertadr[k]:m.mesh_vertadr[k] + m.mesh_vertnum[k]] @ R.reshape(3, 3).T + m.geom_pos[g]
-                f = m.mesh_face[m.mesh_faceadr[k]:m.mesh_faceadr[k] + m.mesh_facenum[k]] + base
+                f = m.mesh_face[m.mesh_faceadr[k]:m.mesh_faceadr[k] + m.mesh_facenum[k]]
+                normals, corner = crease_normals(v, f)
                 mat = m.geom(g).name or f"geom{g}"
                 r, gg, bb, a = m.geom_rgba[g]
                 fm.write(f"newmtl {mat}\nKd {r:.3f} {gg:.3f} {bb:.3f}\nd {a:.3f}\n\n")
                 fo.write(f"o {mat}\nusemtl {mat}\n")
                 fo.writelines(f"v {x:.9f} {y:.9f} {z:.9f}\n" for x, y, z in v)
-                fo.writelines(f"f {i} {j} {l}\n" for i, j, l in f)
+                fo.writelines(f"vn {x:.5f} {y:.5f} {z:.5f}\n" for x, y, z in normals)
+                fo.writelines(" ".join(["f"] + [f"{vi + base}//{ni + nbase}" for vi, ni in zip(fv, fc)]) + "\n"
+                              for fv, fc in zip(f, corner))
                 base += len(v)
+                nbase += len(normals)
         written.append(obj)
     return written
 
