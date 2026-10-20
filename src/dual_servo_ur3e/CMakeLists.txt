@@ -20,6 +20,7 @@ find_package(moveit_msgs REQUIRED)
 
 add_executable(dual_servo_keyboard src/dual_servo_keyboard.cpp)
 add_executable(force_mode src/force_mode.cpp)
+add_executable(freedrive_mode src/freedrive_mode.cpp)
 ament_target_dependencies(dual_servo_keyboard
   rclcpp
   geometry_msgs
@@ -30,6 +31,10 @@ ament_target_dependencies(dual_servo_keyboard
 ament_target_dependencies(force_mode
   ament_index_cpp
 )
+ament_target_dependencies(freedrive_mode
+  ament_index_cpp
+)
+
 target_include_directories(dual_servo_keyboard PRIVATE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
@@ -39,10 +44,16 @@ target_include_directories(force_mode PRIVATE
 target_link_libraries(force_mode
   ur_client_library::urcl
 )
+target_link_libraries(freedrive_mode
+  ur_client_library::urcl
+)
 install(TARGETS dual_servo_keyboard
   DESTINATION lib/${PROJECT_NAME}
 )
 install(TARGETS force_mode
+  DESTINATION lib/${PROJECT_NAME})
+
+install(TARGETS freedrive_mode
   DESTINATION lib/${PROJECT_NAME})
 
 install(DIRECTORY

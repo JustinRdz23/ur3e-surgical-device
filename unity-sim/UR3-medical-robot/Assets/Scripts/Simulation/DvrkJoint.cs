@@ -19,5 +19,10 @@ public class DvrkJoint : MonoBehaviour
         }
     }
 
-    void OnValidate() => AngleRad = angleRad;
+    // MujocoBridge owns the pose when present; OnValidate runs even with the component disabled
+    void OnValidate()
+    {
+        if (GetComponentInParent<MujocoBridge>(true) != null) return;
+        AngleRad = angleRad;
+    }
 }
