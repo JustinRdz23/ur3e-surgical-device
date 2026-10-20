@@ -10,6 +10,12 @@ Generates:
   mjcf/dual_tool/operation_bodies.xml  board + 12 free pieces, copied from operation_scene.xml
   mjcf/dual_tool_scene.xml             board, both tools (attached from hello_unity.xml with
                                        prefixes left_ / right_), camera, "home" keyframe
+  <unity>/Assets/Models/Operation/<body>.obj + .mtl
+                                       visual mesh of the board and each piece, one file per
+                                       MuJoCo body, in that body's frame (bind as Free Bodies)
+  <unity>/Assets/Models/Operation/dual_tool_layout.json
+                                       "home" poses of board, pieces, tool mounts and camera in
+                                       Unity axes; read by Tools > DVRK > Build Dual Tool Scene
 
 operation_scene.xml is only read, never modified: its own tool, mocap body and
 weld are left out. Re-run this script after the board or pieces change there.
@@ -20,6 +26,7 @@ which tool (Justi / Gracie) is decided later in the bridge.
 """
 
 import copy
+import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -48,6 +55,7 @@ CAM_FOVY = 50.0
 GEN_DIR = Path(__file__).resolve().parent
 MJCF_DIR = GEN_DIR.parent
 REPO_ROOT = MJCF_DIR.parents[2]
+UNITY_MESH_DIR = REPO_ROOT / "unity-sim" / "UR3-medical-robot" / "Assets" / "Models" / "Operation"
 OPERATION_XML = MJCF_DIR / "operation_scene.xml"
 BOARD_BODY = "operation_board_body"
 
@@ -100,16 +108,20 @@ def write_fragment(path, tag, elements):
     path.write_text(HEADER + ET.tostring(root, encoding="unicode") + "\n")
 
 
-def measure_board():
-    """Footprint centre, bottom and piece level of the board, in operation_scene.xml coords."""
+def load_operation():
+    """Compile just the board and pieces (no tools)."""
     probe = MJCF_DIR / "_dual_tool_probe.xml"
     probe.write_text(f"""<mujoco><compiler meshdir="../mesh/high_res"/>
   <include file="dual_tool/operation_assets.xml"/>
   <worldbody><include file="dual_tool/operation_bodies.xml"/></worldbody></mujoco>""")
     try:
-        m = mujoco.MjModel.from_xml_path(str(probe))
+        return mujoco.MjModel.from_xml_path(str(probe))
     finally:
         probe.unlink()
+
+
+def measure_board(m):
+    """Footprint centre, bottom and piece level of the board, in operation_scene.xml coords."""
     d = mujoco.MjData(m)
     mujoco.mj_forward(m, d)
 
@@ -131,6 +143,80 @@ def measure_board():
     lo, hi = aabb(board)
     piece_tops = [aabb(b)[1][2] for b in range(1, m.nbody) if b != board and m.body_parentid[b] == 0]
     return np.array([(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2]), lo[2], float(np.median(piece_tops)), hi - lo
+
+
+def export_unity_meshes(m):
+    """One OBJ (+ MTL with the geom colour) per body, from its visual mesh geoms.
+
+    Uses the compiled model, not the STLs: MuJoCo re-centres every mesh on its
+    centroid and moves the geom to compensate, so the vertices are written as
+    geom_pos + geom_quat * mesh_vert, i.e. in the body frame the bridge streams."""
+    UNITY_MESH_DIR.mkdir(exist_ok=True)
+    written = []
+    for b in range(1, m.nbody):
+        geoms = [g for g in range(m.ngeom) if m.geom_bodyid[g] == b
+                 and m.geom_type[g] == mujoco.mjtGeom.mjGEOM_MESH and m.geom_contype[g] == 0]
+        if not geoms:
+            continue
+        name = m.body(b).name
+        obj, mtl = UNITY_MESH_DIR / f"{name}.obj", UNITY_MESH_DIR / f"{name}.mtl"
+        R = np.zeros(9)
+        with open(obj, "w") as fo, open(mtl, "w") as fm:
+            fo.write(f"# dual_tool_gen.py — {name}: MuJoCo body frame (Z-up), metres\nmtllib {mtl.name}\n")
+            base = 1
+            for g in geoms:
+                k = m.geom_dataid[g]
+                mujoco.mju_quat2Mat(R, m.geom_quat[g])
+                v = m.mesh_vert[m.mesh_vertadr[k]:m.mesh_vertadr[k] + m.mesh_vertnum[k]] @ R.reshape(3, 3).T + m.geom_pos[g]
+                f = m.mesh_face[m.mesh_faceadr[k]:m.mesh_faceadr[k] + m.mesh_facenum[k]] + base
+                mat = m.geom(g).name or f"geom{g}"
+                r, gg, bb, a = m.geom_rgba[g]
+                fm.write(f"newmtl {mat}\nKd {r:.3f} {gg:.3f} {bb:.3f}\nd {a:.3f}\n\n")
+                fo.write(f"o {mat}\nusemtl {mat}\n")
+                fo.writelines(f"v {x:.9f} {y:.9f} {z:.9f}\n" for x, y, z in v)
+                fo.writelines(f"f {i} {j} {l}\n" for i, j, l in f)
+                base += len(v)
+        written.append(obj)
+    return written
+
+
+# Same conversion as mujoco_unity_bridge.py: MuJoCo (x, y, z) -> Unity (x, z, y).
+def pos_to_unity(p):
+    return [float(p[0]), float(p[2]), float(p[1])]
+
+
+def quat_to_unity(q):
+    w, x, y, z = q
+    return [float(-x), float(-z), float(-y), float(w)]
+
+
+def write_unity_layout(scene_path, op):
+    """Poses at the "home" keyframe, so Unity starts exactly where MuJoCo does."""
+    m = mujoco.MjModel.from_xml_path(str(scene_path))
+    d = mujoco.MjData(m)
+    mujoco.mj_resetDataKeyframe(m, d, m.key("home").id)
+    mujoco.mj_forward(m, d)
+    r6 = lambda v: [round(x, 7) for x in v]
+    bodies = {op.body(b).name: r6(pos_to_unity(d.xpos[m.body(op.body(b).name).id])
+                                  + quat_to_unity(d.xquat[m.body(op.body(b).name).id]))
+              for b in range(1, op.nbody)}
+    level = np.array([0.0, 0.0, measure_board(op)[2]])
+    tools = {}
+    for name, spec in TOOLS.items():
+        pos, quat = tool_frame(level + spec["tip"], spec)
+        tools[name] = r6(pos_to_unity(pos) + quat_to_unity(quat))
+    cam = m.camera("endoscope").id
+    R = d.cam_xmat[cam].reshape(3, 3)  # MuJoCo camera looks along -Z, up is +Y
+    layout = {
+        "note": "Generated by dual_tool_gen.py. Unity axes: pos [x,y,z], rot [x,y,z,w].",
+        "bodies": bodies,
+        "tools": tools,
+        "camera": {"pos": r6(pos_to_unity(d.cam_xpos[cam])), "forward": r6(pos_to_unity(-R[:, 2])),
+                   "up": r6(pos_to_unity(R[:, 1])), "fovy": float(m.cam_fovy[cam])},
+    }
+    path = UNITY_MESH_DIR / "dual_tool_layout.json"
+    path.write_text(json.dumps(layout, indent=1) + "\n")
+    return path
 
 
 # ---- tools and camera ------------------------------------------------------
@@ -229,10 +315,14 @@ def main():
     meshes, bodies = extract_operation()
     write_fragment(GEN_DIR / "operation_assets.xml", "asset", meshes)
     write_fragment(GEN_DIR / "operation_bodies.xml", None, bodies)
-    centre_xy, bottom_z, level_z, size = measure_board()
+    op = load_operation()
+    centre_xy, bottom_z, level_z, size = measure_board(op)
+    unity_objs = export_unity_meshes(op) if UNITY_MESH_DIR.parent.is_dir() else []
     scene = MJCF_DIR / "dual_tool_scene.xml"
     tools_q = write_scene_xml(scene, centre_xy, bottom_z, level_z)
     add_home_key(scene, tools_q)
+    if unity_objs:
+        unity_objs.append(write_unity_layout(scene, op))
 
     print(f"board:  {size[0]*1e3:.0f} x {size[1]*1e3:.0f} mm, {len(bodies) - 1} pieces, "
           f"pieces level z = {level_z*1e3:.1f} mm, ground z = {bottom_z*1e3:.1f} mm")
@@ -240,6 +330,8 @@ def main():
         print(f"tool {name:5s}: jaws at {fmt(np.add(spec['tip'], [0, 0, level_z]) * 1e3)} mm")
     for p in [GEN_DIR / "operation_assets.xml", GEN_DIR / "operation_bodies.xml", scene]:
         print(f"wrote:  {p.relative_to(REPO_ROOT)}")
+    if unity_objs:
+        print(f"wrote:  {len(unity_objs) - 1} OBJ+MTL and dual_tool_layout.json in {UNITY_MESH_DIR.relative_to(REPO_ROOT)}/")
 
 
 if __name__ == "__main__":
