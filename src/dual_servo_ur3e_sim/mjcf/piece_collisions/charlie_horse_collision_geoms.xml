@@ -1,0 +1,9 @@
+<mujocoinclude>
+  <geom name="charlie_horse_collision_01" type="mesh" mesh="charlie_horse_col_01" rgba="1 1 1 0" mass="0.00712317" friction="1 0.005 0.0001" solref="0.002 1" solimp="0.95 0.99 0.001" condim="3" contype="1" conaffinity="1"/>
+  <geom name="charlie_horse_collision_02" type="mesh" mesh="charlie_horse_col_02" rgba="1 1 1 0" mass="0.00522588" friction="1 0.005 0.0001" solref="0.002 1" solimp="0.95 0.99 0.001" condim="3" contype="1" conaffinity="1"/>
+  <geom name="charlie_horse_collision_03" type="mesh" mesh="charlie_horse_col_03" rgba="1 1 1 0" mass="0.00580626" friction="1 0.005 0.0001" solref="0.002 1" solimp="0.95 0.99 0.001" condim="3" contype="1" conaffinity="1"/>
+  <geom name="charlie_horse_collision_04" type="mesh" mesh="charlie_horse_col_04" rgba="1 1 1 0" mass="0.00252202" friction="1 0.005 0.0001" solref="0.002 1" solimp="0.95 0.99 0.001" condim="3" contype="1" conaffinity="1"/>
+  <geom name="charlie_horse_collision_05" type="mesh" mesh="charlie_horse_col_05" rgba="1 1 1 0" mass="0.00263920" friction="1 0.005 0.0001" solref="0.002 1" solimp="0.95 0.99 0.001" condim="3" contype="1" conaffinity="1"/>
+  <geom name="charlie_horse_collision_06" type="mesh" mesh="charlie_horse_col_06" rgba="1 1 1 0" mass="0.00402321" friction="1 0.005 0.0001" solref="0.002 1" solimp="0.95 0.99 0.001" condim="3" contype="1" conaffinity="1"/>
+  <geom name="charlie_horse_collision_07" type="mesh" mesh="charlie_horse_col_07" rgba="1 1 1 0" mass="0.00266026" friction="1 0.005 0.0001" solref="0.002 1" solimp="0.95 0.99 0.001" condim="3" contype="1" conaffinity="1"/>
+</mujocoinclude>
