@@ -13,6 +13,8 @@ Generates:
   <unity>/Assets/Models/Operation/<body>.obj + .mtl
                                        visual mesh of the board and each piece, one file per
                                        MuJoCo body, in that body's frame (bind as Free Bodies)
+  mesh/high_res/cavity.obj + <unity>/Assets/Models/Operation/cavity_body.obj
+                                       visual-only abdominal cavity around the board
   <unity>/Assets/Models/Operation/dual_tool_layout.json
                                        "home" poses of board, pieces, tool mounts and camera in
                                        Unity axes; read by Tools > DVRK > Build Dual Tool Scene
@@ -42,15 +44,34 @@ TOOL_TIP_LOCAL = np.array([0.4817, 0.0, 0.0])
 # +Y (into the view) towards +X; elevation is downward. Keep the elevation below
 # the camera's so the shafts enter from the bottom corners of the view.
 TOOLS = {
-    "left":  {"tip": (-0.035, -0.005, 0.015), "azimuth_deg": 28.0, "elevation_deg": 20.0},
-    "right": {"tip": (0.035, -0.005, 0.015), "azimuth_deg": -28.0, "elevation_deg": 20.0},
+    "left":  {"tip": (-0.035, -0.005, 0.015), "azimuth_deg": 28.0, "elevation_deg": 50.0},
+    "right": {"tip": (0.035, -0.005, 0.015), "azimuth_deg": -28.0, "elevation_deg": 50.0},
 }
 JAW_HOME = 0.3  # rad, jaws slightly open at start
 
+# ---- ports (remote centre of motion) ---------------------------------------
+# Each tool pivots where its shaft crosses the cavity wall, like a laparoscopic
+# trocar: yaw and pitch about that point, then insertion along the shaft.
+PORT_RANGES = {"yaw": (-0.6, 0.6), "pitch": (-0.45, 0.6), "insert": (-0.06, 0.10)}  # rad, rad, m
+# Position servos. The tool is ~0.41 kg hanging ~0.25 m from the port: kp keeps
+# its gravity sag under ~0.3 deg / 0.5 mm; kv ~ critical damping.
+PORT_GAINS = {"yaw": (300.0, 6.0, 8.0), "pitch": (300.0, 6.0, 8.0), "insert": (3000.0, 70.0, 30.0)}  # kp, kv, |force|
+
 # ---- camera (relative to the board centre, z from the board's pieces level) --
-CAM_POS = (0.0, -0.15, 0.13)
+CAM_POS = (0.0, -0.09, 0.19)
 CAM_TARGET = (0.0, 0.0, 0.0)
 CAM_FOVY = 50.0
+
+# ---- cavity (visual only, MuJoCo world frame) ------------------------------
+# Half-dome of tissue around the board, seen from inside. The camera must be
+# inside it and the tool bases outside, so the shafts cross the wall like ports.
+CAVITY_RADII = (0.32, 0.30, 0.24)  # semi-axes x, y, z [m]
+CAVITY_CENTRE_Y = 0.02             # [m], pushed back a little so the far wall frames the view
+CAVITY_FOLDS = 0.05                # bump amplitude, relative to the radius
+CAVITY_SEED = 3                    # fixed: the same folds on every run
+CAVITY_RGBA = (0.78, 0.36, 0.38, 1.0)
+N_CAVITY_U, N_CAVITY_V = 128, 40   # around / up the dome
+CAVITY_CREASE_DEG = 60.0           # organic surface: smooth almost everything
 
 # ---- Unity meshes ----------------------------------------------------------
 # Faces meeting at more than this angle keep a hard edge; flatter ones are smoothed.
@@ -58,6 +79,7 @@ CREASE_ANGLE_DEG = 30.0
 
 GEN_DIR = Path(__file__).resolve().parent
 MJCF_DIR = GEN_DIR.parent
+MESH_DIR = MJCF_DIR.parent / "mesh" / "high_res"
 REPO_ROOT = MJCF_DIR.parents[2]
 UNITY_MESH_DIR = REPO_ROOT / "unity-sim" / "UR3-medical-robot" / "Assets" / "Models" / "Operation"
 OPERATION_XML = MJCF_DIR / "operation_scene.xml"
@@ -85,12 +107,29 @@ def mat_to_quat(R):
 
 
 # ---- Operation board -------------------------------------------------------
+def expand_includes(elem, base_dir, depth=0):
+    """Replace every <include file=...> under elem by the children of that file's
+    root (<mujoco> or <mujocoinclude>), recursively. Like MuJoCo, paths are relative
+    to the directory of the top-level model (operation_scene.xml)."""
+    assert depth < 10, "include nesting too deep (cycle?)"
+    for i, child in reversed(list(enumerate(elem))):
+        if child.tag == "include":
+            inc = ET.parse(base_dir / child.get("file")).getroot()
+            expand_includes(inc, base_dir, depth + 1)
+            elem.remove(child)
+            for j, sub in enumerate(inc):
+                elem.insert(i + j, sub)
+        else:
+            expand_includes(child, base_dir, depth)
+
+
 def extract_operation():
     """Board + pieces (top-level bodies ending in _body) and the meshes they use."""
     root = ET.parse(OPERATION_XML).getroot()
+    expand_includes(root, OPERATION_XML.parent)
     bodies = [b for b in root.find("worldbody").findall("body") if b.get("name", "").endswith("_body")]
     used = {g.get("mesh") for b in bodies for g in b.iter("geom") if g.get("mesh")}
-    meshes = [m for m in root.find("asset").findall("mesh") if m.get("name") in used]
+    meshes = [m for a in root.findall("asset") for m in a.findall("mesh") if m.get("name") in used]
     missing = used - {m.get("name") for m in meshes}
     assert not missing, f"meshes referenced but not defined in operation_scene.xml: {missing}"
     bodies = [copy.deepcopy(b) for b in bodies]
@@ -104,6 +143,17 @@ def extract_operation():
     return [copy.deepcopy(m) for m in meshes], bodies
 
 
+def operation_compiler_attrs():
+    """Compiler options of operation_scene.xml that change how its geoms compile
+    (e.g. fitaabb resizes the box fitted to writers_cramp). meshdir and angle are
+    the dual scene's own; the pieces use neither angles nor relative mesh paths."""
+    comp = ET.parse(OPERATION_XML).getroot().find("compiler")
+    attrs = dict(comp.attrib) if comp is not None else {}
+    for own in ("meshdir", "angle", "autolimits"):
+        attrs.pop(own, None)
+    return attrs
+
+
 def write_fragment(path, tag, elements):
     root = ET.Element("mujoco")
     parent = ET.SubElement(root, tag) if tag else root
@@ -115,7 +165,8 @@ def write_fragment(path, tag, elements):
 def load_operation():
     """Compile just the board and pieces (no tools)."""
     probe = MJCF_DIR / "_dual_tool_probe.xml"
-    probe.write_text(f"""<mujoco><compiler meshdir="../mesh/high_res"/>
+    extra = "".join(f' {k}="{v}"' for k, v in operation_compiler_attrs().items())
+    probe.write_text(f"""<mujoco><compiler meshdir="../mesh/high_res"{extra}/>
   <include file="dual_tool/operation_assets.xml"/>
   <worldbody><include file="dual_tool/operation_bodies.xml"/></worldbody></mujoco>""")
     try:
@@ -211,6 +262,86 @@ def export_unity_meshes(m):
     return written
 
 
+def build_cavity(floor_z):
+    """Dome (ellipsoid top half) with smooth folds plus a floor disc, all faces
+    pointing inwards: it is only ever seen from inside."""
+    rng = np.random.default_rng(CAVITY_SEED)
+    # integer frequency around the dome keeps the surface closed at u = 0 / 2*pi
+    waves = [(int(rng.integers(2, 9)), rng.uniform(1.0, 6.0), rng.uniform(0, 2 * np.pi), rng.uniform(0.4, 1.0))
+             for _ in range(7)]
+    total = sum(w[3] for w in waves)
+    a, b, c = CAVITY_RADII
+    centre = np.array([0.0, CAVITY_CENTRE_Y, floor_z])
+
+    def point(u, v):
+        # cos(v) fades the folds to zero at the apex so it stays a single point
+        bump = CAVITY_FOLDS * np.cos(v) * sum(A * np.sin(k * u + f * v + ph) for k, f, ph, A in waves) / total
+        return centre + (1.0 + bump) * np.array([a * np.cos(v) * np.cos(u), b * np.cos(v) * np.sin(u), c * np.sin(v)])
+
+    verts, wall, floor = [], [], []
+    for j in range(N_CAVITY_V):
+        v = 0.5 * np.pi * j / N_CAVITY_V
+        verts += [point(2 * np.pi * i / N_CAVITY_U, v) for i in range(N_CAVITY_U)]
+    apex = len(verts)
+    verts.append(centre + np.array([0.0, 0.0, c]))
+    ring = lambda j, i: j * N_CAVITY_U + i % N_CAVITY_U
+    for j in range(N_CAVITY_V - 1):
+        for i in range(N_CAVITY_U):
+            wall += [(ring(j, i), ring(j + 1, i), ring(j + 1, i + 1)), (ring(j, i), ring(j + 1, i + 1), ring(j, i + 1))]
+    for i in range(N_CAVITY_U):
+        wall.append((ring(N_CAVITY_V - 1, i), apex, ring(N_CAVITY_V - 1, i + 1)))
+    hub = len(verts)
+    verts.append(centre.copy())
+    for i in range(N_CAVITY_U):
+        floor.append((hub, ring(0, i), ring(0, i + 1)))
+
+    verts = np.array(verts)
+
+    def inward(faces, toward):
+        f = np.array(faces)
+        n = np.cross(verts[f[:, 1]] - verts[f[:, 0]], verts[f[:, 2]] - verts[f[:, 0]])
+        if np.sum(n * toward(verts[f].mean(1))) < 0:   # mostly the wrong way: flip the group
+            f = f[:, [0, 2, 1]]
+        return f
+    wall = inward(wall, lambda m: centre - m)                                   # towards the middle
+    floor = inward(floor, lambda m: np.tile([0.0, 0.0, 1.0], (len(m), 1)))      # upwards
+    return verts, np.vstack([wall, floor])
+
+
+def inside_cavity(p):
+    a, b, c = CAVITY_RADII
+    q = (np.asarray(p) - [0.0, CAVITY_CENTRE_Y, 0.0]) / [a, b, c]
+    return float(q @ q)
+
+
+def write_cavity(floor_z):
+    """MuJoCo mesh (meshdir) and the same surface with crease normals for Unity."""
+    verts, faces = build_cavity(floor_z)
+    write_obj_plain(MESH_DIR / "cavity.obj", verts, faces)
+    out = [MESH_DIR / "cavity.obj"]
+    if UNITY_MESH_DIR.parent.is_dir():
+        normals, corner = crease_normals(verts, faces, CAVITY_CREASE_DEG)
+        obj, mtl = UNITY_MESH_DIR / "cavity_body.obj", UNITY_MESH_DIR / "cavity_body.mtl"
+        r, g, b, al = CAVITY_RGBA
+        mtl.write_text(f"newmtl cavity\nKd {r:.3f} {g:.3f} {b:.3f}\nd {al:.3f}\n")
+        with open(obj, "w") as fo:
+            fo.write("# dual_tool_gen.py — cavity_body: MuJoCo body frame (Z-up), metres\nmtllib cavity_body.mtl\n"
+                     "o cavity\nusemtl cavity\n")
+            fo.writelines(f"v {x:.9f} {y:.9f} {z:.9f}\n" for x, y, z in verts)
+            fo.writelines(f"vn {x:.5f} {y:.5f} {z:.5f}\n" for x, y, z in normals)
+            fo.writelines(" ".join(["f"] + [f"{vi + 1}//{ni + 1}" for vi, ni in zip(fv, fc)]) + "\n"
+                          for fv, fc in zip(faces, corner))
+        out.append(obj)
+    return out
+
+
+def write_obj_plain(path, verts, faces):
+    with open(path, "w") as f:
+        f.write("# dual_tool_gen.py — visual-only cavity, MuJoCo world frame (Z-up), metres\n")
+        f.writelines(f"v {x:.9f} {y:.9f} {z:.9f}\n" for x, y, z in verts)
+        f.writelines(f"f {a + 1} {b + 1} {c + 1}\n" for a, b, c in faces)
+
+
 # Same conversion as mujoco_unity_bridge.py: MuJoCo (x, y, z) -> Unity (x, z, y).
 def pos_to_unity(p):
     return [float(p[0]), float(p[2]), float(p[1])]
@@ -231,6 +362,8 @@ def write_unity_layout(scene_path, op):
     bodies = {op.body(b).name: r6(pos_to_unity(d.xpos[m.body(op.body(b).name).id])
                                   + quat_to_unity(d.xquat[m.body(op.body(b).name).id]))
               for b in range(1, op.nbody)}
+    cav = m.body("cavity_body").id
+    bodies["cavity_body"] = r6(pos_to_unity(d.xpos[cav]) + quat_to_unity(d.xquat[cav]))
     level = np.array([0.0, 0.0, measure_board(op)[2]])
     tools = {}
     for name, spec in TOOLS.items():
@@ -262,6 +395,16 @@ def tool_frame(tip, spec):
     return np.asarray(tip) - R @ TOOL_TIP_LOCAL, mat_to_quat(R)
 
 
+def find_port(tip, spec):
+    """Where the shaft (from the jaws back to the tool base) leaves the cavity."""
+    base, q = tool_frame(tip, spec)
+    x = normalize(np.asarray(tip) - base)
+    for s in np.linspace(0.0, np.linalg.norm(np.asarray(tip) - base), 4000):
+        if inside_cavity(np.asarray(tip) - s * x) >= 1.0:
+            return np.asarray(tip) - s * x, q, np.linalg.norm(np.asarray(tip) - s * x - base)
+    raise SystemExit("tool shaft never leaves the cavity: no port")
+
+
 def camera_xyaxes(pos, target):
     fwd = normalize(np.subtract(target, pos))
     right = normalize(np.cross(fwd, [0.0, 0.0, 1.0]))
@@ -271,20 +414,35 @@ def camera_xyaxes(pos, target):
 def write_scene_xml(path, centre_xy, bottom_z, level_z):
     level = np.array([0.0, 0.0, level_z])
     frames = []
+    actuators = []
     for name, spec in TOOLS.items():
-        pos, quat = tool_frame(level + spec["tip"], spec)
-        frames.append(f"""    <frame name="{name}_mount" pos="{fmt(pos)}" quat="{fmt(quat)}">
-      <attach model="dvrk_tool" body="tool_main_insert_Shape_IndexedFaceSet.030" prefix="{name}_"/>
+        port, quat, back = find_port(level + spec["tip"], spec)
+        lo = {k: v[0] for k, v in PORT_RANGES.items()}
+        hi = {k: v[1] for k, v in PORT_RANGES.items()}
+        # joints in one body apply in order: yaw about the port's Z, pitch about the
+        # yawed Y, insertion along the pitched shaft (X) -> the port point never moves
+        frames.append(f"""    <frame name="{name}_mount" pos="{fmt(port)}" quat="{fmt(quat)}">
+      <body name="{name}_port">
+        <inertial pos="0 0 0" mass="0.001" diaginertia="1e-7 1e-7 1e-7"/>
+        <joint name="{name}_port_yaw" type="hinge" axis="0 0 1" range="{lo['yaw']:g} {hi['yaw']:g}"/>
+        <joint name="{name}_port_pitch" type="hinge" axis="0 1 0" range="{lo['pitch']:g} {hi['pitch']:g}"/>
+        <joint name="{name}_port_insert" type="slide" axis="1 0 0" range="{lo['insert']:g} {hi['insert']:g}"/>
+        <frame pos="{-back:.6g} 0 0">
+          <attach model="dvrk_tool" body="tool_main_insert_Shape_IndexedFaceSet.030" prefix="{name}_"/>
+        </frame>
+      </body>
     </frame>""")
+        for k, (kp, kv, f) in PORT_GAINS.items():
+            actuators.append(f'    <position name="{name}_act_port_{k}" joint="{name}_port_{k}" kp="{kp:g}" kv="{kv:g}" '
+                             f'ctrlrange="{lo[k]:g} {hi[k]:g}" forcerange="{-f:g} {f:g}"/>')
     cam_pos, cam_target = level + CAM_POS, level + CAM_TARGET
-    # Per tool: roll pitch jaw_left jaw_right (attach order = TOOLS order); the
-    # 12 free pieces keep their qpos0 (the "home" key lists the full qpos below).
-    tools_q = "  ".join(f"0 0 {JAW_HOME:g} {JAW_HOME:g}" for _ in TOOLS)
+    extra = "".join(f' {k}="{v}"' for k, v in operation_compiler_attrs().items())
     path.write_text(HEADER + f"""<!-- Run: python3 mujoco_unity_bridge.py (model arg) ../mjcf/dual_tool_scene.xml
      Tools come from hello_unity.xml via <attach>, so their joints/actuators are
      prefixed: left_joint_roll, right_act_gripper_left, ... -->
 <mujoco model="dual_tool_scene">
-  <compiler angle="radian" meshdir="../mesh/high_res" autolimits="true"/>
+  <!-- Extra attributes copied from operation_scene.xml's compiler. -->
+  <compiler angle="radian" meshdir="../mesh/high_res" autolimits="true"{extra}/>
 
   <!-- Same as operation_scene.xml: 0.5 ms, Newton; plus elliptic cones and noslip for grasping. -->
   <option timestep="0.0005" solver="Newton" iterations="100" tolerance="1e-10"
@@ -303,13 +461,25 @@ def write_scene_xml(path, centre_xy, bottom_z, level_z):
     <texture name="backdrop" type="2d" builtin="checker" rgb1="0.30 0.12 0.12" rgb2="0.36 0.15 0.15"
              width="256" height="256"/>
     <material name="backdrop_mat" texture="backdrop" texrepeat="8 8"/>
+    <!-- open surface: shell inertia, otherwise MuJoCo rejects its "volume" -->
+    <mesh name="cavity_mesh" file="cavity.obj" inertia="shell"/>
+    <material name="tissue" rgba="{fmt(CAVITY_RGBA)}" specular="0.6" shininess="0.7"/>
   </asset>
   <include file="dual_tool/operation_assets.xml"/>
 
   <worldbody>
-    <light name="key" pos="0 -0.15 0.5" dir="0 0.3 -1" diffuse="0.8 0.8 0.8" castshadow="true"/>
-    <light name="fill" pos="0 0.3 0.4" dir="0 -0.6 -1" diffuse="0.3 0.3 0.3" castshadow="false"/>
-    <geom name="ground" type="plane" size="0.6 0.6 0.01" pos="0 0 {bottom_z:.6g}" material="backdrop_mat"/>
+    <!-- Lights inside the cavity (it is 0.24 m tall): from outside, the dome would shadow everything. -->
+    <light name="key" pos="0 -0.12 0.2" dir="0 0.5 -1" diffuse="0.8 0.8 0.8" castshadow="true"/>
+    <light name="fill" pos="0 0.15 0.18" dir="0 -0.6 -1" diffuse="0.3 0.3 0.3" castshadow="false"/>
+    <!-- Physical floor for pieces that leave the board; hidden so the cavity floor shows. -->
+    <geom name="ground" type="plane" size="0.6 0.6 0.01" pos="0 0 {bottom_z:.6g}" material="backdrop_mat"
+          group="3" rgba="0 0 0 0"/>
+
+    <!-- Visual only: the tool shafts cross it like ports, so it must not collide. -->
+    <body name="cavity_body">
+      <geom name="cavity" type="mesh" mesh="cavity_mesh" material="tissue" group="1"
+            contype="0" conaffinity="0" mass="0"/>
+    </body>
 
     <camera name="endoscope" pos="{fmt(cam_pos)}" xyaxes="{fmt(camera_xyaxes(cam_pos, cam_target))}" fovy="{CAM_FOVY:g}"/>
 
@@ -320,22 +490,29 @@ def write_scene_xml(path, centre_xy, bottom_z, level_z):
 
 {chr(10).join(frames)}
   </worldbody>
+
+  <!-- Port servos (the tools' own roll/pitch/jaw actuators come from hello_unity.xml). -->
+  <actuator>
+{chr(10).join(actuators)}
+  </actuator>
 </mujoco>
 """)
-    return tools_q
 
 
-def add_home_key(path, tools_q):
-    """"home" needs the full qpos: the free pieces' qpos0 come first (bodies before
-    the tools in the tree), so read them from the compiled model."""
+def add_home_key(path):
+    """"home": everything at qpos0 (pieces where operation_scene.xml puts them,
+    ports centred) but the jaws slightly open; every position actuator starts at
+    its joint's home value so nothing jumps on the first step."""
     m = mujoco.MjModel.from_xml_path(str(path))
-    n_tool = 4 * len(TOOLS)
-    pieces_q = fmt(m.qpos0[:m.nq - n_tool])
+    qpos = m.qpos0.copy()
+    for j in range(m.njnt):
+        if "joint_gripper" in m.joint(j).name:
+            qpos[m.jnt_qposadr[j]] = JAW_HOME
+    ctrl = [qpos[m.jnt_qposadr[m.actuator_trnid[a][0]]] for a in range(m.nu)]
     text = path.read_text().replace("</mujoco>\n", f"""
-  <!-- Bridge loads "home" on start and on reset.
-       qpos = 12 free pieces (as placed in operation_scene.xml) | per tool (left, right): roll pitch jaw_left jaw_right -->
+  <!-- Bridge loads "home" on start and on reset (generated from the compiled model). -->
   <keyframe>
-    <key name="home" qpos="{pieces_q}  {tools_q}" ctrl="{tools_q}"/>
+    <key name="home" qpos="{fmt(qpos)}" ctrl="{fmt(ctrl)}"/>
   </keyframe>
 </mujoco>
 """)
@@ -349,17 +526,24 @@ def main():
     op = load_operation()
     centre_xy, bottom_z, level_z, size = measure_board(op)
     unity_objs = export_unity_meshes(op) if UNITY_MESH_DIR.parent.is_dir() else []
+    cavity_files = write_cavity(bottom_z - 0.0005)  # just under the board, no z-fighting
+    level = np.array([0.0, 0.0, level_z])
+    assert inside_cavity(level + CAM_POS) < 0.9, "camera outside (or on) the cavity wall"
+    for name, spec in TOOLS.items():
+        base, _ = tool_frame(level + spec["tip"], spec)
+        assert inside_cavity(base) > 1.1, f"{name} tool base inside the cavity: no port to cross"
     scene = MJCF_DIR / "dual_tool_scene.xml"
-    tools_q = write_scene_xml(scene, centre_xy, bottom_z, level_z)
-    add_home_key(scene, tools_q)
+    write_scene_xml(scene, centre_xy, bottom_z, level_z)
+    add_home_key(scene)
     if unity_objs:
         unity_objs.append(write_unity_layout(scene, op))
 
     print(f"board:  {size[0]*1e3:.0f} x {size[1]*1e3:.0f} mm, {len(bodies) - 1} pieces, "
           f"pieces level z = {level_z*1e3:.1f} mm, ground z = {bottom_z*1e3:.1f} mm")
     for name, spec in TOOLS.items():
-        print(f"tool {name:5s}: jaws at {fmt(np.add(spec['tip'], [0, 0, level_z]) * 1e3)} mm")
-    for p in [GEN_DIR / "operation_assets.xml", GEN_DIR / "operation_bodies.xml", scene]:
+        port, _, _ = find_port(level + spec["tip"], spec)
+        print(f"tool {name:5s}: jaws at {fmt(np.add(spec['tip'], [0, 0, level_z]) * 1e3)} mm, port at {fmt(port * 1e3)} mm")
+    for p in [GEN_DIR / "operation_assets.xml", GEN_DIR / "operation_bodies.xml", scene] + cavity_files:
         print(f"wrote:  {p.relative_to(REPO_ROOT)}")
     if unity_objs:
         print(f"wrote:  {len(unity_objs) - 1} OBJ+MTL and dual_tool_layout.json in {UNITY_MESH_DIR.relative_to(REPO_ROOT)}/")

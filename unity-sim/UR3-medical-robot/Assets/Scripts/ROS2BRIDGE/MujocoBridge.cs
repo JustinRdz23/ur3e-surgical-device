@@ -41,6 +41,17 @@ public class MujocoBridge : MonoBehaviour
     public Key jawCloseKey = Key.D;
     public Key resetKey = Key.R;
 
+    [Header("Multi-tool")]
+    [Tooltip("This tool's prefix in MuJoCo (left_ / right_). Empty in single-tool scenes.")]
+    public string toolPrefix = "";
+    [Tooltip("Transform standing for the MuJoCo world origin. Empty = this object, as in single-tool scenes where the tool root is the world.")]
+    public Transform mujocoWorld;
+    [Tooltip("Children named like a MuJoCo body (board, pieces) follow that body. Set it on one tool only.")]
+    public Transform bodiesRoot;
+    [Tooltip("Draw contact markers and MuJoCo primitives. Keep it on for one tool only.")]
+    public bool drawScene = true;
+    public Vector2 hudPosition = new Vector2(10f, 10f);
+
     [Header("Mallas")]
     [Tooltip("El importador OBJ de Unity invierte X. Si la pinza se ve espejeada, desmárcalo.")]
     public bool objImporterFlipsX = true;
@@ -105,10 +116,13 @@ public class MujocoBridge : MonoBehaviour
         public double tSend, tRecv;
     }
 
-    UdpClient rx, tx;
-    Thread rxThread;
+    UdpClient tx;
     Packet latest;
-    long recvSeq;
+    // One UDP socket for the whole scene, shared by every MujocoBridge (two tools
+    // cannot both bind statePort); the receive thread hands each packet to all of them.
+    static UdpClient sharedRx;
+    static readonly List<MujocoBridge> consumers = new List<MujocoBridge>();
+    static long recvSeq, sharedReceived, sharedLost, sharedOutOfOrder;
     float lastPacketTime = -10f;
     MaterialPropertyBlock mpb;
 
@@ -135,6 +149,32 @@ public class MujocoBridge : MonoBehaviour
     {
         int i = n.IndexOf("_Shape");
         return i > 0 ? n.Substring(0, i) : n;
+    }
+
+    Transform World => mujocoWorld != null ? mujocoWorld : transform;
+
+    // MuJoCo body name without this tool's prefix; null if it belongs to another tool
+    string OwnBody(string n) =>
+        toolPrefix.Length == 0 ? n : n.StartsWith(toolPrefix) ? n.Substring(toolPrefix.Length) : null;
+
+    readonly Dictionary<string, Transform> freeBodies = new Dictionary<string, Transform>();
+
+    void BindBodies()
+    {
+        freeBodies.Clear();
+        if (bodiesRoot == null) return;
+        foreach (Transform c in bodiesRoot) freeBodies[c.name] = c;
+        Debug.Log($"[MujocoBridge] {freeBodies.Count} bodies under {bodiesRoot.name} follow MuJoCo");
+    }
+
+    void UpdateBodies(JObject bodies)
+    {
+        foreach (var kv in freeBodies)
+            if (bodies[kv.Key] is JArray a)
+            {
+                Read(a, out Vector3 p, out Quaternion q);
+                kv.Value.SetPositionAndRotation(World.TransformPoint(p), World.rotation * q);
+            }
     }
 
     // rotación que lleva vértices importados por Unity al marco del body MuJoCo (en Unity)
@@ -209,13 +249,14 @@ public class MujocoBridge : MonoBehaviour
     static string Shift(Vector3 s) =>
         s == Vector3.zero ? "" : $"  · malla recorrida {s.magnitude * 100f:F1} cm (¿low_res?) → corregida";
 
-    void SetBodyPose(string key, Vector3 p, Quaternion q)
+    // frame: the tool root for the q=0 rest pose, World for poses streamed by MuJoCo
+    void SetBodyPose(string key, Vector3 p, Quaternion q, Transform frame)
     {
         if (!links.TryGetValue(key, out Link L)) return;
         Vector3 pos = p; Quaternion rot = q;
         if (L.meshOnNode) { pos = p + q * L.nodeOffPos; rot = q * L.nodeOffRot; }
-        L.t.position = transform.TransformPoint(pos);
-        L.t.rotation = transform.rotation * rot;
+        L.t.position = frame.TransformPoint(pos);
+        L.t.rotation = frame.rotation * rot;
     }
 
     [ContextMenu("Alinear con MuJoCo (q=0)")]
@@ -225,7 +266,7 @@ public class MujocoBridge : MonoBehaviour
         UnityEditor.Undo.RegisterFullObjectHierarchyUndo(gameObject, "Alinear con MuJoCo");
 #endif
         Bind();
-        foreach (var key in Order) SetBodyPose(key, Rest[key].pos, Rest[key].rot);
+        foreach (var key in Order) SetBodyPose(key, Rest[key].pos, Rest[key].rot, transform);
     }
 
     [ContextMenu("Apuntar Main Camera a la pinza")]
@@ -250,9 +291,18 @@ public class MujocoBridge : MonoBehaviour
         AlignRest();
         if (logCsv) OpenLogs();
         tx = new UdpClient();
-        rx = new UdpClient(statePort);
-        rxThread = new Thread(ReceiveLoop) { IsBackground = true };
-        rxThread.Start();
+        BindBodies();
+        lock (consumers)
+        {
+            consumers.Add(this);
+            if (sharedRx == null)
+            {
+                sharedRx = new UdpClient(statePort);
+                recvSeq = sharedReceived = sharedLost = sharedOutOfOrder = 0;
+                var sock = sharedRx;
+                new Thread(() => ReceiveLoop(sock)) { IsBackground = true }.Start();
+            }
+        }
     }
 
     void OpenLogs()
@@ -260,8 +310,8 @@ public class MujocoBridge : MonoBehaviour
         string dir = string.IsNullOrEmpty(logDir) ? Path.Combine(Application.dataPath, "..", "BridgeLogs") : logDir;
         Directory.CreateDirectory(dir);
         string stamp = System.DateTime.Now.ToString("yyyyMMdd_HHmmss");
-        recvLog = new StreamWriter(Path.Combine(dir, $"unity_recv_{stamp}.csv"));
-        frameLog = new StreamWriter(Path.Combine(dir, $"unity_frames_{stamp}.csv"));
+        recvLog = new StreamWriter(Path.Combine(dir, $"unity_recv_{toolPrefix}{stamp}.csv"));
+        frameLog = new StreamWriter(Path.Combine(dir, $"unity_frames_{toolPrefix}{stamp}.csv"));
         recvLog.WriteLine("seq,t_send,t_recv,bytes");
         frameLog.WriteLine("frame,seq,t_send,t_recv,t_apply,unity_dt_ms,stale_total,lost_total,ncontacts,roll,pitch,jaw_left,jaw_right");
         logging = true;
@@ -269,7 +319,7 @@ public class MujocoBridge : MonoBehaviour
     }
 
     // parses off the main thread; Update only picks up the newest packet
-    void ReceiveLoop()
+    static void ReceiveLoop(UdpClient rx)
     {
         var ep = new IPEndPoint(IPAddress.Any, 0);
         while (true)
@@ -285,20 +335,27 @@ public class MujocoBridge : MonoBehaviour
             catch (Newtonsoft.Json.JsonException) { continue; }
             long seq = (long?)st["seq"] ?? 0;
             double tSend = (double?)st["t_send"] ?? 0;
-            received++;
+            sharedReceived++;
 
-            if (seq <= recvSeq && recvSeq - seq < 100) { outOfOrder++; continue; }
-            if (seq > recvSeq + 1 && recvSeq > 0) lost += seq - recvSeq - 1;
+            if (seq <= recvSeq && recvSeq - seq < 100) { sharedOutOfOrder++; continue; }
+            if (seq > recvSeq + 1 && recvSeq > 0) sharedLost += seq - recvSeq - 1;
             recvSeq = seq;   // a big backwards jump means Python restarted
 
-            if (logging) recvRows.Enqueue(string.Format(CultureInfo.InvariantCulture, "{0},{1:F6},{2:F6},{3}", seq, tSend, t, raw.Length));
-            var prev = Interlocked.Exchange(ref latest, new Packet { st = st, seq = seq, tSend = tSend, tRecv = t });
-            if (prev != null) stale++;   // overwritten before any frame showed it
+            var pkt = new Packet { st = st, seq = seq, tSend = tSend, tRecv = t };
+            MujocoBridge[] now;
+            lock (consumers) now = consumers.ToArray();
+            foreach (var c in now)   // the JObject is only read afterwards, on the main thread
+            {
+                if (c.logging) c.recvRows.Enqueue(string.Format(CultureInfo.InvariantCulture, "{0},{1:F6},{2:F6},{3}", seq, tSend, t, raw.Length));
+                var prev = Interlocked.Exchange(ref c.latest, pkt);
+                if (prev != null) c.stale++;   // overwritten before any frame showed it
+            }
         }
     }
 
     void Update()
     {
+        received = sharedReceived; lost = sharedLost; outOfOrder = sharedOutOfOrder;
         ApplyState();
         SendButtons();
         connected = Time.time - lastPacketTime < 0.5f;
@@ -315,9 +372,10 @@ public class MujocoBridge : MonoBehaviour
         bool Down(Key k) => kb != null && kb[k].isPressed;
         bool reset = kb != null && kb[resetKey].wasPressedThisFrame;
         string json = string.Format(CultureInfo.InvariantCulture,
-            "{{\"buttons\":{{\"clutch\":{0},\"jaw_open\":{1},\"jaw_close\":{2}}},\"ack\":{3},\"hold_ms\":{4:F3}{5}}}",
+            "{{\"buttons\":{{\"clutch\":{0},\"jaw_open\":{1},\"jaw_close\":{2}}},\"ack\":{3},\"hold_ms\":{4:F3}{5}{6}}}",
             B(Down(clutchKey)), B(Down(jawOpenKey)), B(Down(jawCloseKey)), lastSeq, holdMs,
-            reset ? ",\"reset\":true" : "");
+            reset ? ",\"reset\":true" : "",
+            toolPrefix.Length > 0 ? ",\"tool\":\"" + toolPrefix + "\"" : "");
         byte[] b = Encoding.UTF8.GetBytes(json);
         tx.Send(b, b.Length, pythonHost, cmdPort);
     }
@@ -338,14 +396,16 @@ public class MujocoBridge : MonoBehaviour
         JObject st = pkt.st;
 
         simTime = (float)st["t_sim"];
-        masterOk = (bool)st["master_ok"];
-        clutch = (bool)st["clutch"];
-        pitchMargin = (float)st["pitch_margin"];
-        jawForce = (float)st["jaw_contact_force"];
         contacts = (int)st["ncon"];
-        var tq = (JArray)st["tool_q"];
+        // v2 packets carry one entry per tool under "tools"; v1 fields describe the only tool
+        JObject ts = (st["tools"] as JObject)?[toolPrefix] as JObject ?? st;
+        masterOk = (bool)ts["master_ok"];
+        clutch = (bool)ts["clutch"];
+        pitchMargin = (float)ts["pitch_margin"];
+        jawForce = (float)ts["jaw_contact_force"];
+        var tq = (JArray)ts["tool_q"];
         for (int i = 0; i < toolQ.Length && i < tq.Count; i++) toolQ[i] = (float)tq[i];
-        if (st["master"] is JObject m)
+        if (ts["master"] is JObject m)
         {
             var sing = (JObject)m["sing"];
             wristSing = (float)sing["wrist"];
@@ -353,19 +413,21 @@ public class MujocoBridge : MonoBehaviour
             shoulderSing = (float)sing["shoulder"];
             if (masterView != null) masterView.SetJointAngles(m["q"].ToObject<float[]>());
         }
-        if (st["scene"] is JArray scene) UpdatePrims(scene);
+        if (drawScene && st["scene"] is JArray scene) UpdatePrims(scene);
 
         var bodies = (JObject)st["bodies"];
         foreach (var key in Order)                       // padre -> hijo
             foreach (var kv in bodies)
-                if (ShortName(kv.Key) == key)
-                {
-                    var a = (JArray)kv.Value;            // [px,py,pz,qx,qy,qz,qw] marco Unity
-                    SetBodyPose(key, new Vector3((float)a[0], (float)a[1], (float)a[2]),
-                                     new Quaternion((float)a[3], (float)a[4], (float)a[5], (float)a[6]));
-                    break;
-                }
-        int shown = UpdateContacts((JArray)st["contacts"]);
+            {
+                string own = OwnBody(kv.Key);
+                if (own == null || ShortName(own) != key) continue;
+                var a = (JArray)kv.Value;            // [px,py,pz,qx,qy,qz,qw] marco Unity
+                SetBodyPose(key, new Vector3((float)a[0], (float)a[1], (float)a[2]),
+                                 new Quaternion((float)a[3], (float)a[4], (float)a[5], (float)a[6]), World);
+                break;
+            }
+        UpdateBodies(bodies);
+        int shown = drawScene ? UpdateContacts((JArray)st["contacts"]) : 0;
         UpdateHighlight();
 
         double tApply = Now();
@@ -400,7 +462,7 @@ public class MujocoBridge : MonoBehaviour
             r.transform.localPosition = p;
             r.transform.localScale = Vector3.one * markerSize * (1f + Mathf.Clamp01(Mathf.Abs(fn) / forceForMaxSize));
             SetColor(r, col);
-            Debug.DrawRay(transform.TransformPoint(p), transform.TransformDirection(f) * (markerSize * 2f / forceForMaxSize), col);
+            Debug.DrawRay(World.TransformPoint(p), World.TransformDirection(f) * (markerSize * 2f / forceForMaxSize), col);
         }
         return n;
     }
@@ -433,7 +495,7 @@ public class MujocoBridge : MonoBehaviour
         var go = GameObject.CreatePrimitive(type);
         go.name = "mj_" + name;
         Destroy(go.GetComponent<Collider>());
-        go.transform.SetParent(transform, false);
+        go.transform.SetParent(World, false);
         return go;
     }
 
@@ -467,8 +529,8 @@ public class MujocoBridge : MonoBehaviour
         var kb = Keyboard.current;
         string teclas = kb == null ? "SIN TECLADO (Input System)"
             : $"clutch {(kb[clutchKey].isPressed ? "■" : "□")} · abrir {(kb[jawOpenKey].isPressed ? "■" : "□")} · cerrar {(kb[jawCloseKey].isPressed ? "■" : "□")}";
-        GUI.Label(new Rect(10, 10, 700, 160),
-            $"{estado}   t={simTime:F2}s  piezas={links.Count}  contactos={contacts}\n" +
+        GUI.Label(new Rect(hudPosition.x, hudPosition.y, 700, 160),
+            (toolPrefix.Length > 0 ? $"[{toolPrefix.TrimEnd('_')}] " : "") + $"{estado}   t={simTime:F2}s  piezas={links.Count}  contactos={contacts}\n" +
             $"Teclas que ve Unity — {teclas}\n" +
             $"UR3e — muñeca {wristSing:F2} · codo {elbowSing:F2} · hombro {shoulderSing:F2}   (0 = singular)\n" +
             $"Herramienta — roll {toolQ[0] * Mathf.Rad2Deg:F1}° · pitch {toolQ[1] * Mathf.Rad2Deg:F1}° · " +
@@ -480,7 +542,11 @@ public class MujocoBridge : MonoBehaviour
 
     void OnDestroy()
     {
-        rx?.Close();
+        lock (consumers)
+        {
+            consumers.Remove(this);
+            if (consumers.Count == 0 && sharedRx != null) { sharedRx.Close(); sharedRx = null; }
+        }
         tx?.Close();
         if (logging)
         {

@@ -3,7 +3,8 @@
      Tools come from hello_unity.xml via <attach>, so their joints/actuators are
      prefixed: left_joint_roll, right_act_gripper_left, ... -->
 <mujoco model="dual_tool_scene">
-  <compiler angle="radian" meshdir="../mesh/high_res" autolimits="true"/>
+  <!-- Extra attributes copied from operation_scene.xml's compiler. -->
+  <compiler angle="radian" meshdir="../mesh/high_res" autolimits="true" fitaabb="true"/>
 
   <!-- Same as operation_scene.xml: 0.5 ms, Newton; plus elliptic cones and noslip for grasping. -->
   <option timestep="0.0005" solver="Newton" iterations="100" tolerance="1e-10"
@@ -22,32 +23,69 @@
     <texture name="backdrop" type="2d" builtin="checker" rgb1="0.30 0.12 0.12" rgb2="0.36 0.15 0.15"
              width="256" height="256"/>
     <material name="backdrop_mat" texture="backdrop" texrepeat="8 8"/>
+    <!-- open surface: shell inertia, otherwise MuJoCo rejects its "volume" -->
+    <mesh name="cavity_mesh" file="cavity.obj" inertia="shell"/>
+    <material name="tissue" rgba="0.78 0.36 0.38 1" specular="0.6" shininess="0.7"/>
   </asset>
   <include file="dual_tool/operation_assets.xml"/>
 
   <worldbody>
-    <light name="key" pos="0 -0.15 0.5" dir="0 0.3 -1" diffuse="0.8 0.8 0.8" castshadow="true"/>
-    <light name="fill" pos="0 0.3 0.4" dir="0 -0.6 -1" diffuse="0.3 0.3 0.3" castshadow="false"/>
-    <geom name="ground" type="plane" size="0.6 0.6 0.01" pos="0 0 -3.25907e-10" material="backdrop_mat"/>
+    <!-- Lights inside the cavity (it is 0.24 m tall): from outside, the dome would shadow everything. -->
+    <light name="key" pos="0 -0.12 0.2" dir="0 0.5 -1" diffuse="0.8 0.8 0.8" castshadow="true"/>
+    <light name="fill" pos="0 0.15 0.18" dir="0 -0.6 -1" diffuse="0.3 0.3 0.3" castshadow="false"/>
+    <!-- Physical floor for pieces that leave the board; hidden so the cavity floor shows. -->
+    <geom name="ground" type="plane" size="0.6 0.6 0.01" pos="0 0 -3.57532e-10" material="backdrop_mat"
+          group="3" rgba="0 0 0 0"/>
 
-    <camera name="endoscope" pos="0 -0.15 0.144637" xyaxes="1 -0 0 0 0.654931 0.755689" fovy="50"/>
+    <!-- Visual only: the tool shafts cross it like ports, so it must not collide. -->
+    <body name="cavity_body">
+      <geom name="cavity" type="mesh" mesh="cavity_mesh" material="tissue" group="1"
+            contype="0" conaffinity="0" mass="0"/>
+    </body>
 
-    <!-- Board centred on the origin; operation_scene.xml places it at 0.2425 -0.2. -->
-    <frame name="operation_mount" pos="-0.2425 0.2 0">
+    <camera name="endoscope" pos="0 -0.09 0.204637" xyaxes="1 -0 0 0 0.903738 0.428086" fovy="50"/>
+
+    <!-- Board centred on the origin; operation_scene.xml places it at 0.242087 -0.2. -->
+    <frame name="operation_mount" pos="-0.242087 0.2 0">
       <include file="dual_tool/operation_bodies.xml"/>
     </frame>
 
-    <frame name="left_mount" pos="-0.247506 -0.404666 0.194388" quat="0.844145 -0.0894354 0.148846 0.507213">
-      <attach model="dvrk_tool" body="tool_main_insert_Shape_IndexedFaceSet.030" prefix="left_"/>
+    <frame name="left_mount" pos="-0.100175 -0.127577 0.195085" quat="0.776857 -0.217664 0.362255 0.466783">
+      <body name="left_port">
+        <inertial pos="0 0 0" mass="0.001" diaginertia="1e-7 1e-7 1e-7"/>
+        <joint name="left_port_yaw" type="hinge" axis="0 0 1" range="-0.6 0.6"/>
+        <joint name="left_port_pitch" type="hinge" axis="0 1 0" range="-0.45 0.6"/>
+        <joint name="left_port_insert" type="slide" axis="1 0 0" range="-0.06 0.1"/>
+        <frame pos="-0.265724 0 0">
+          <attach model="dvrk_tool" body="tool_main_insert_Shape_IndexedFaceSet.030" prefix="left_"/>
+        </frame>
+      </body>
     </frame>
-    <frame name="right_mount" pos="0.247506 -0.404666 0.194388" quat="0.507213 -0.148846 0.0894354 0.844145">
-      <attach model="dvrk_tool" body="tool_main_insert_Shape_IndexedFaceSet.030" prefix="right_"/>
+    <frame name="right_mount" pos="0.100175 -0.127577 0.195085" quat="0.466783 -0.362255 0.217664 0.776857">
+      <body name="right_port">
+        <inertial pos="0 0 0" mass="0.001" diaginertia="1e-7 1e-7 1e-7"/>
+        <joint name="right_port_yaw" type="hinge" axis="0 0 1" range="-0.6 0.6"/>
+        <joint name="right_port_pitch" type="hinge" axis="0 1 0" range="-0.45 0.6"/>
+        <joint name="right_port_insert" type="slide" axis="1 0 0" range="-0.06 0.1"/>
+        <frame pos="-0.265724 0 0">
+          <attach model="dvrk_tool" body="tool_main_insert_Shape_IndexedFaceSet.030" prefix="right_"/>
+        </frame>
+      </body>
     </frame>
   </worldbody>
 
-  <!-- Bridge loads "home" on start and on reset.
-       qpos = 12 free pieces (as placed in operation_scene.xml) | per tool (left, right): roll pitch jaw_left jaw_right -->
+  <!-- Port servos (the tools' own roll/pitch/jaw actuators come from hello_unity.xml). -->
+  <actuator>
+    <position name="left_act_port_yaw" joint="left_port_yaw" kp="300" kv="6" ctrlrange="-0.6 0.6" forcerange="-8 8"/>
+    <position name="left_act_port_pitch" joint="left_port_pitch" kp="300" kv="6" ctrlrange="-0.45 0.6" forcerange="-8 8"/>
+    <position name="left_act_port_insert" joint="left_port_insert" kp="3000" kv="70" ctrlrange="-0.06 0.1" forcerange="-30 30"/>
+    <position name="right_act_port_yaw" joint="right_port_yaw" kp="300" kv="6" ctrlrange="-0.6 0.6" forcerange="-8 8"/>
+    <position name="right_act_port_pitch" joint="right_port_pitch" kp="300" kv="6" ctrlrange="-0.45 0.6" forcerange="-8 8"/>
+    <position name="right_act_port_insert" joint="right_port_insert" kp="3000" kv="70" ctrlrange="-0.06 0.1" forcerange="-30 30"/>
+  </actuator>
+
+  <!-- Bridge loads "home" on start and on reset (generated from the compiled model). -->
   <keyframe>
-    <key name="home" qpos="-0.0893958 0.0445338 0.0126 1 0 0 0 -0.0325994 0.0371738 0.0126 1 0 0 0 -0.025674 -0.0428743 0.0126 1 0 0 0 -0.0625239 -0.0294303 0.0126 1 0 0 0 -0.0466728 0.0226976 0.0126747 1 0 0 0 -0.00826807 0.0258087 0.0126 1 0 0 0 -0.0323173 0.0229112 0.0126 1 0 0 0 -0.0518276 0.0152422 0.0134135 1 0 0 0 0.0168161 -0.0189893 0.0126 1 0 0 0 0.0755318 0.0227016 0.0126 1 0 0 0 0.017679 -0.0212801 0.0126 1 0 0 0 -0.0109033 -0.028019 0.0129504 1 0 0 0  0 0 0.3 0.3  0 0 0.3 0.3" ctrl="0 0 0.3 0.3  0 0 0.3 0.3"/>
+    <key name="home" qpos="-0.0889828 0.0445338 0.0126 1 0 0 0 -0.0321864 0.0371738 0.0126 1 0 0 0 -0.025261 -0.0428743 0.0126 1 0 0 0 -0.0621109 -0.0294303 0.0126 1 0 0 0 -0.0462598 0.0226976 0.0126747 1 0 0 0 -0.00785507 0.0258087 0.0126 1 0 0 0 -0.0319043 0.0229112 0.0126 1 0 0 0 -0.0514146 0.0152422 0.0134135 1 0 0 0 0.0172291 -0.0189893 0.0126 1 0 0 0 0.0759448 0.0227016 0.0126 1 0 0 0 0.018092 -0.0212801 0.0126 1 0 0 0 -0.0104903 -0.028019 0.0129504 1 0 0 0 0 0 0 0 0 0.3 0.3 0 0 0 0 0 0.3 0.3" ctrl="0 0 0 0 0 0 0 0 0.3 0.3 0 0 0.3 0.3"/>
   </keyframe>
 </mujoco>
