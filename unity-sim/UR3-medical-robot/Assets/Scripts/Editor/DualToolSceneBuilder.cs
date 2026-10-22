@@ -44,11 +44,23 @@ public static class DualToolSceneBuilder
     // (same as MujocoBridge.MeshRot / DvrkToolBuilder).
     static readonly Quaternion MeshRot = new Quaternion(0f, 0.70710678f, 0.70710678f, 0f);
 
-    // Keys per tool: left hand drives the left tool, right hand the right one. R resets the sim.
-    struct ToolKeys { public Key open, close, clutch; public Vector2 hud; }
+    // Keys per tool: left hand drives the left tool, right hand the right one; Backspace resets.
+    // Jaw/clutch keys work in every mode; the motion keys only in keyboard mode (--keyboard).
+    struct ToolKeys
+    {
+        public Key open, close, clutch;
+        public Key up, down, left, right, insert, retract, rollL, rollR, wristUp, wristDown;
+        public Vector2 hud;
+    }
     static readonly Dictionary<string, ToolKeys> Keys = new Dictionary<string, ToolKeys> {
-        {"left",  new ToolKeys { open = Key.E, close = Key.D, clutch = Key.LeftShift,  hud = new Vector2(10f, 10f) }},
-        {"right", new ToolKeys { open = Key.I, close = Key.K, clutch = Key.RightShift, hud = new Vector2(10f, 190f) }},
+        {"left", new ToolKeys {
+            open = Key.T, close = Key.G, clutch = Key.LeftShift,
+            up = Key.W, down = Key.S, left = Key.A, right = Key.D, insert = Key.Q, retract = Key.E,
+            rollL = Key.Z, rollR = Key.C, wristUp = Key.R, wristDown = Key.F, hud = new Vector2(10f, 10f) }},
+        {"right", new ToolKeys {
+            open = Key.P, close = Key.Semicolon, clutch = Key.RightShift,
+            up = Key.I, down = Key.K, left = Key.J, right = Key.L, insert = Key.U, retract = Key.O,
+            rollL = Key.N, rollR = Key.M, wristUp = Key.Y, wristDown = Key.H, hud = new Vector2(10f, 210f) }},
     };
 
     // tool link -> ProductShot material (white housing, dark shaft, steel wrist and jaws)
@@ -174,6 +186,12 @@ public static class DualToolSceneBuilder
             bridge.jawOpenKey = k.open;
             bridge.jawCloseKey = k.close;
             bridge.clutchKey = k.clutch;
+            bridge.resetKey = Key.Backspace;
+            bridge.pivotUpKey = k.up; bridge.pivotDownKey = k.down;
+            bridge.pivotLeftKey = k.left; bridge.pivotRightKey = k.right;
+            bridge.insertKey = k.insert; bridge.retractKey = k.retract;
+            bridge.rollLeftKey = k.rollL; bridge.rollRightKey = k.rollR;
+            bridge.wristUpKey = k.wristUp; bridge.wristDownKey = k.wristDown;
             bridge.hudPosition = k.hud;
         }
         bridge.AlignRest();

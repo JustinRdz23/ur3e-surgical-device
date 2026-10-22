@@ -29,6 +29,23 @@ UR_JOINTS = ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
 DEFAULT_MAP = {"joint_roll": ("wrist_3_joint", 1.0),
                "joint_pitch": ("wrist_2_joint", 1.0)}
 
+# Scenes with ports (dual_tool_scene.xml) also move the whole tool about its trocar.
+PORT_JOINTS = ["port_yaw", "port_pitch", "port_insert"]
+# Arm mode: displacement of the UR3e tool flange (base frame, metres) since the clutch
+# was released -> port joint. (flange axis 0/1/2 = x/y/z, gain in rad/m or m/m).
+# ~3.3 rad/m moves the jaws about 1:1 with the hand (they sit ~0.3 m past the port).
+# Signs and axes depend on how each UR is mounted relative to the camera: calibrate
+# them on the real cell.
+PORT_MAP = {"port_yaw": (0, -3.3), "port_pitch": (2, -3.3), "port_insert": (1, 1.0)}
+# Keyboard mode: held key -> (joint, direction, speed in rad/s or m/s)
+KEY_RATES = {
+    "pivot_left": ("port_yaw", +1, 0.35), "pivot_right": ("port_yaw", -1, 0.35),
+    "pivot_up": ("port_pitch", -1, 0.30), "pivot_down": ("port_pitch", +1, 0.30),
+    "insert": ("port_insert", +1, 0.03), "retract": ("port_insert", -1, 0.03),
+    "roll_left": ("joint_roll", +1, 1.5), "roll_right": ("joint_roll", -1, 1.5),
+    "wrist_up": ("joint_pitch", -1, 1.0), "wrist_down": ("joint_pitch", +1, 1.0),
+}
+
 JAW_SPEED = 1.5
 JAW_MAX = 1.0472
 
@@ -90,9 +107,25 @@ def short_name(n):
     return n[:i] if i > 0 else n
 
 
+class KeyboardMaster:
+    # test mode without robots: the tool follows held keys from Unity, never an arm
+    kind = "keyboard"
+
+    def spin(self):
+        pass
+
+    def jaw(self, t):
+        return None
+
+    def joints(self, t):
+        return None
+
+
 class DemoMaster:
     # driven by sim time so the trajectory is reproducible run to run;
     # phase keeps several demo tools from moving in lockstep
+    kind = "demo"
+
     def __init__(self, phase=0.0):
         self.phase = phase
 
@@ -207,24 +240,55 @@ class RosMaster:
         self.hub.close()
 
 
+class UnityButtons:
+    """Jaw and clutch commands from the Unity keyboard. Kept behind this small
+    interface so a UR digital-input or haptic-device source can replace it."""
+
+    def __init__(self, rx, prefix):
+        self.rx, self.prefix = rx, prefix
+
+    def read(self):
+        b = self.rx.buttons_for(self.prefix)
+        return {"clutch": bool(b.get("clutch")), "jaw_open": bool(b.get("jaw_open")),
+                "jaw_close": bool(b.get("jaw_close"))}
+
+    def keys(self):
+        # motion keys, only used by tools in keyboard mode
+        return self.rx.buttons_for(self.prefix)
+
+
 class Teleop:
-    def __init__(self, model, mapping, prefix=""):
+    def __init__(self, model, mapping, prefix="", keyboard=False):
         self.model = model
         self.prefix = prefix
         self.map = mapping
+        self.keyboard = keyboard
         self.act = {model.actuator(i).trnid[0]: i for i in range(model.nu)}
+        self.has_port = self._jid(PORT_JOINTS[0]) >= 0
         self.clutch = True
         self.q_master_ref = None
+        self.tcp_ref = None
         self.q_tool_ref = {}
         self.jaw = 0.0
 
     def _jid(self, name):
         return mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, self.prefix + name)
 
-    def update(self, data, qm, buttons, dt, jaw_cmd=None):
-        if buttons.get("jaw_open"):
+    def _set(self, data, joint, target):
+        j = self._jid(joint)
+        if j < 0 or j not in self.act:
+            return
+        a = self.act[j]
+        lo, hi = self.model.actuator_ctrlrange[a]
+        data.ctrl[a] = float(np.clip(target, lo, hi))
+
+    def _ctrl(self, data, joint):
+        return float(data.ctrl[self.act[self._jid(joint)]])
+
+    def update(self, data, qm, grip, keys, dt, jaw_cmd=None):
+        if grip["jaw_open"]:
             self.jaw = min(JAW_MAX, self.jaw + JAW_SPEED * dt)
-        elif buttons.get("jaw_close"):
+        elif grip["jaw_close"]:
             self.jaw = max(0.0, self.jaw - JAW_SPEED * dt)
         elif jaw_cmd is not None:
             self.jaw = jaw_cmd
@@ -233,23 +297,35 @@ class Teleop:
             if j >= 0 and j in self.act:
                 data.ctrl[self.act[j]] = self.jaw
 
-        want_clutch = bool(buttons.get("clutch")) or qm is None
+        if self.keyboard:
+            # keyboard mode only: rates while keys are held; no arm involved
+            self.clutch = False
+            for key, (joint, sign, speed) in KEY_RATES.items():
+                if keys.get(key) and self._jid(joint) >= 0:
+                    self._set(data, joint, self._ctrl(data, joint) + sign * speed * dt)
+            return
+
+        # arm mode: every motion comes from the master arm, relative to where the
+        # tool was when the clutch was released
+        want_clutch = grip["clutch"] or qm is None
         if want_clutch:
             self.clutch = True
             return
+        tcp = ur3e_fk_frames([qm[j] for j in UR_JOINTS])[6][:3, 3] if self.has_port else None
         if self.clutch:
             self.clutch = False
             self.q_master_ref = dict(qm)
-            self.q_tool_ref = {tj: float(data.ctrl[self.act[self._jid(tj)]]) for tj in self.map
-                               if self._jid(tj) in self.act}
+            self.tcp_ref = tcp
+            joints = list(self.map) + (PORT_JOINTS if self.has_port else [])
+            self.q_tool_ref = {tj: self._ctrl(data, tj) for tj in joints if self._jid(tj) in self.act}
         for tj, (mj, scale) in self.map.items():
-            j = self._jid(tj)
-            if j < 0 or j not in self.act or mj not in qm:
-                continue
-            a = self.act[j]
-            target = self.q_tool_ref[tj] + scale * (qm[mj] - self.q_master_ref[mj])
-            lo, hi = self.model.actuator_ctrlrange[a]
-            data.ctrl[a] = float(np.clip(target, lo, hi))
+            if tj in self.q_tool_ref and mj in qm:
+                self._set(data, tj, self.q_tool_ref[tj] + scale * (qm[mj] - self.q_master_ref[mj]))
+        if self.has_port:
+            delta = tcp - self.tcp_ref
+            for tj, (axis, gain) in self.port_map.items():
+                if tj in self.q_tool_ref:
+                    self._set(data, tj, self.q_tool_ref[tj] + gain * delta[axis])
 
 
 class CmdReceiver:
@@ -385,10 +461,13 @@ def parse_pairs(items, what):
 class ToolChannel:
     """Everything one simulated tool needs: its master, teleop state and joints."""
 
-    def __init__(self, model, prefix, mapping, master, desc):
+    def __init__(self, model, prefix, mapping, master, desc, scale):
         self.prefix, self.master, self.desc = prefix, master, desc
-        self.teleop = Teleop(model, mapping, prefix)
+        self.mode = getattr(master, "kind", "arm")
+        self.teleop = Teleop(model, mapping, prefix, keyboard=self.mode == "keyboard")
+        self.teleop.port_map = {k: (axis, gain * scale) for k, (axis, gain) in PORT_MAP.items()}
         self.adr = [model.joint(prefix + n).qposadr[0] for n in TOOL_JOINTS]
+        self.port_adr = [model.joint(prefix + n).qposadr[0] for n in PORT_JOINTS] if self.teleop.has_port else []
         self.pitch = model.joint(prefix + "joint_pitch")
         self.jaw_left = model.joint(prefix + "joint_gripper_left")
         self.jaw_ids = {i for i in range(model.nbody)
@@ -402,8 +481,14 @@ def make_masters(args, prefixes):
     tools = [p.rstrip("_") for p in prefixes]
     arms = {**DEFAULT_ARMS, **parse_pairs(args.arms, "--arms")}
     ips = parse_pairs(args.robot_ips, "--robot-ips")
+    # --keyboard alone = every tool; --keyboard right = only that tool. A tool is
+    # either keyboard or arm, never both.
+    kb = None if args.keyboard is None else (set(args.keyboard) or set(tools))
     hub, out = None, []
     for k, (prefix, tool) in enumerate(zip(prefixes, tools)):
+        if kb is not None and (tool in kb or (prefix == "" and not args.keyboard)):
+            out.append((KeyboardMaster(), "TECLADO"))
+            continue
         if args.demo:
             out.append((DemoMaster(phase=7.0 * k), "DEMO"))
             continue
@@ -426,6 +511,9 @@ def main():
     ap.add_argument("--topic", default="/joint_states")
     ap.add_argument("--scale", type=float, default=1.0, help="escala de movimiento maestro->esclavo")
     ap.add_argument("--demo", action="store_true", help="maestro sintetico (sin ROS2/robot)")
+    ap.add_argument("--keyboard", nargs="*", metavar="TOOL",
+                    help="test mode without robots: tools driven by held keys in Unity. "
+                         "Alone = every tool; with names (e.g. right) = only those, the rest use their arm")
     ap.add_argument("--robot-ip", help="IP del UR3e: lee las juntas por RTDE directo, sin ROS2")
     ap.add_argument("--robot-ips", nargs="*", metavar="TOOL=IP",
                     help="multi-tool scenes: RTDE IP per tool, e.g. left=192.168.56.101")
@@ -440,8 +528,11 @@ def main():
     data = mujoco.MjData(model)
     mapping = {k: (v[0], v[1] * args.scale) for k, v in DEFAULT_MAP.items()}
     prefixes = tool_prefixes(model)
-    tools = [ToolChannel(model, p, mapping, m, desc)
+    tools = [ToolChannel(model, p, mapping, m, desc, args.scale)
              for p, (m, desc) in zip(prefixes, make_masters(args, prefixes))]
+    rx = CmdReceiver(CMD_PORT)
+    for t in tools:
+        t.grip = UnityButtons(rx, t.prefix)  # jaw + clutch source (UR inputs / haptic can replace it)
     masters = list({id(t.master): t.master for t in tools}.values())
 
     # scenes may define a "home" keyframe (e.g. dual_tool_scene.xml: jaws open, pieces in place)
@@ -468,7 +559,6 @@ def main():
     rest = body_poses(d0, body_names)
 
     tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    rx = CmdReceiver(CMD_PORT)
     log = BridgeLog(args.log, prefixes) if args.log else None
     sent = collections.OrderedDict()
     viewer = mujoco.viewer.launch_passive(model, data) if args.viewer else None
@@ -495,7 +585,7 @@ def main():
                 m.spin()
             for t in tools:
                 t.qm = t.master.joints(data.time)
-                t.teleop.update(data, t.qm, rx.buttons_for(t.prefix), period, t.master.jaw(data.time))
+                t.teleop.update(data, t.qm, t.grip.read(), t.grip.keys(), period, t.master.jaw(data.time))
 
             # real-time sync: step until sim time catches up with wall time
             step0 = time.perf_counter()
@@ -517,12 +607,14 @@ def main():
                     qv = [t.qm[j] for j in UR_JOINTS]
                     master_state = {"q": r6(qv), "sing": ur3e_singularity(qv)}
                 tool_state[t.prefix] = {
-                    "master_ok": t.qm is not None,
+                    "mode": t.mode,
+                    "master_ok": t.qm is not None or t.mode == "keyboard",
                     "clutch": t.teleop.clutch,
                     "master": master_state,
                     "tool_q": r6([data.qpos[a] for a in t.adr]),
                     "pitch_margin": float(1.0 - abs(data.qpos[t.pitch.qposadr[0]]) / t.pitch.range[1]),
                     "jaw_contact_force": float(jaw_force[t.prefix]),
+                    "port_q": r6([data.qpos[a] for a in t.port_adr]),
                 }
 
             seq += 1

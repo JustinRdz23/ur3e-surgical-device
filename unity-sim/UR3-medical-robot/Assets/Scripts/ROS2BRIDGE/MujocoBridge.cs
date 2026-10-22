@@ -41,6 +41,18 @@ public class MujocoBridge : MonoBehaviour
     public Key jawCloseKey = Key.D;
     public Key resetKey = Key.R;
 
+    [Header("Keyboard mode (bridge started with --keyboard; ignored for arm-driven tools)")]
+    public Key pivotUpKey = Key.None;
+    public Key pivotDownKey = Key.None;
+    public Key pivotLeftKey = Key.None;
+    public Key pivotRightKey = Key.None;
+    public Key insertKey = Key.None;
+    public Key retractKey = Key.None;
+    public Key rollLeftKey = Key.None;
+    public Key rollRightKey = Key.None;
+    public Key wristUpKey = Key.None;
+    public Key wristDownKey = Key.None;
+
     [Header("Multi-tool")]
     [Tooltip("This tool's prefix in MuJoCo (left_ / right_). Empty in single-tool scenes.")]
     public string toolPrefix = "";
@@ -83,6 +95,8 @@ public class MujocoBridge : MonoBehaviour
 
     [Header("Estado (solo lectura)")]
     public bool connected, masterOk, clutch;
+    public string mode = "arm";                     // arm | demo | keyboard, set by the bridge
+    public float[] portQ = new float[0];            // yaw, pitch, insertion about the trocar
     public float simTime, wristSing = 1f, elbowSing = 1f, shoulderSing = 1f, pitchMargin = 1f, jawForce;
     public int contacts;
     public long lastSeq, received, lost, stale, outOfOrder;
@@ -366,16 +380,27 @@ public class MujocoBridge : MonoBehaviour
         }
     }
 
+    // motion keys for keyboard mode; the bridge ignores them for tools driven by an arm
+    (string name, Key key)[] MotionKeys => new[] {
+        ("pivot_up", pivotUpKey), ("pivot_down", pivotDownKey), ("pivot_left", pivotLeftKey), ("pivot_right", pivotRightKey),
+        ("insert", insertKey), ("retract", retractKey), ("roll_left", rollLeftKey), ("roll_right", rollRightKey),
+        ("wrist_up", wristUpKey), ("wrist_down", wristDownKey),
+    };
+
     void SendButtons()
     {
         var kb = Keyboard.current;
-        bool Down(Key k) => kb != null && kb[k].isPressed;
-        bool reset = kb != null && kb[resetKey].wasPressedThisFrame;
+        bool Down(Key k) => kb != null && k != Key.None && kb[k].isPressed;
+        bool reset = kb != null && resetKey != Key.None && kb[resetKey].wasPressedThisFrame;
+        var motion = new StringBuilder();
+        foreach (var (name, key) in MotionKeys)
+            if (Down(key)) motion.Append(",\"").Append(name).Append("\":true");
         string json = string.Format(CultureInfo.InvariantCulture,
-            "{{\"buttons\":{{\"clutch\":{0},\"jaw_open\":{1},\"jaw_close\":{2}}},\"ack\":{3},\"hold_ms\":{4:F3}{5}{6}}}",
+            "{{\"buttons\":{{\"clutch\":{0},\"jaw_open\":{1},\"jaw_close\":{2}{7}}},\"ack\":{3},\"hold_ms\":{4:F3}{5}{6}}}",
             B(Down(clutchKey)), B(Down(jawOpenKey)), B(Down(jawCloseKey)), lastSeq, holdMs,
             reset ? ",\"reset\":true" : "",
-            toolPrefix.Length > 0 ? ",\"tool\":\"" + toolPrefix + "\"" : "");
+            toolPrefix.Length > 0 ? ",\"tool\":\"" + toolPrefix + "\"" : "",
+            motion.ToString());
         byte[] b = Encoding.UTF8.GetBytes(json);
         tx.Send(b, b.Length, pythonHost, cmdPort);
     }
@@ -400,6 +425,8 @@ public class MujocoBridge : MonoBehaviour
         // v2 packets carry one entry per tool under "tools"; v1 fields describe the only tool
         JObject ts = (st["tools"] as JObject)?[toolPrefix] as JObject ?? st;
         masterOk = (bool)ts["master_ok"];
+        mode = (string)ts["mode"] ?? "arm";
+        if (ts["port_q"] is JArray pq) portQ = pq.ToObject<float[]>();
         clutch = (bool)ts["clutch"];
         pitchMargin = (float)ts["pitch_margin"];
         jawForce = (float)ts["jaw_contact_force"];
@@ -524,8 +551,11 @@ public class MujocoBridge : MonoBehaviour
 
     void OnGUI()
     {
-        string estado = !connected ? "MuJoCo SIN SEÑAL (¿corre el .py?)" : !masterOk ? "UR3e SIN SEÑAL (esclavo congelado)"
-                      : clutch ? "CLUTCH (reposiciona el UR3e)" : "Siguiendo al UR3e";
+        string estado = !connected ? "MuJoCo SIN SEÑAL (¿corre el .py?)"
+                      : mode == "keyboard" ? "TECLADO (sin brazos)"
+                      : !masterOk ? "UR3e SIN SEÑAL (esclavo congelado)"
+                      : clutch ? "CLUTCH (reposiciona el UR3e)"
+                      : mode == "demo" ? "DEMO (maestro sintético)" : "Siguiendo al UR3e";
         var kb = Keyboard.current;
         string teclas = kb == null ? "SIN TECLADO (Input System)"
             : $"clutch {(kb[clutchKey].isPressed ? "■" : "□")} · abrir {(kb[jawOpenKey].isPressed ? "■" : "□")} · cerrar {(kb[jawCloseKey].isPressed ? "■" : "□")}";
@@ -535,9 +565,19 @@ public class MujocoBridge : MonoBehaviour
             $"UR3e — muñeca {wristSing:F2} · codo {elbowSing:F2} · hombro {shoulderSing:F2}   (0 = singular)\n" +
             $"Herramienta — roll {toolQ[0] * Mathf.Rad2Deg:F1}° · pitch {toolQ[1] * Mathf.Rad2Deg:F1}° · " +
             $"dedos {toolQ[2] * Mathf.Rad2Deg:F1}°/{toolQ[3] * Mathf.Rad2Deg:F1}° · F mandíbula {jawForce:F2} N\n" +
+            (portQ.Length == 3 ? $"Puerto — yaw {portQ[0] * Mathf.Rad2Deg:F1}° · pitch {portQ[1] * Mathf.Rad2Deg:F1}° · inserción {portQ[2] * 1000f:F0} mm\n" : "") +
             $"Bridge — seq {lastSeq} · perdidos {lost} · no mostrados {stale} · desorden {outOfOrder} · " +
             $"latencia {latencyMs:F2} ms (espera en Unity {holdMs:F2} ms)\n" +
-            "Espacio: clutch · E/D: abrir/cerrar pinza · R: reset");
+            KeyHelp());
+    }
+
+    string KeyHelp()
+    {
+        string K(Key k) => k == Key.None ? "-" : k.ToString();
+        string grip = $"{K(clutchKey)}: clutch · {K(jawOpenKey)}/{K(jawCloseKey)}: abrir/cerrar · {K(resetKey)}: reset";
+        if (mode != "keyboard") return grip;
+        return grip + $"\nTeclado — pivote {K(pivotUpKey)}/{K(pivotDownKey)}/{K(pivotLeftKey)}/{K(pivotRightKey)} · " +
+               $"insertar/sacar {K(insertKey)}/{K(retractKey)} · roll {K(rollLeftKey)}/{K(rollRightKey)} · muñeca {K(wristUpKey)}/{K(wristDownKey)}";
     }
 
     void OnDestroy()
