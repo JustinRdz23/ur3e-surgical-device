@@ -1,0 +1,542 @@
+<mujoco model="dvrk_large_needle_driver">
+  <compiler angle="degree"
+          meshdir="../mesh/high_res"
+          fitaabb="true"/>
+
+  <option timestep="0.0005"
+          gravity="0 0 -9.81"
+          solver="Newton"
+          iterations="100"
+          tolerance="1e-10"/>
+
+  <default>
+  <default class="board_collision">
+    <mesh scale="0.001 0.001 0.001"/>
+
+    <geom type="mesh"
+          contype="0"
+          conaffinity="0"
+          mass="0"/>
+  </default>
+</default>
+
+  <asset>
+      <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
+      <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+                 markrgb="0.8 0.8 0.8" width="300" height="300"/>
+      <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+
+      <mesh name="operation_board"
+      file="Operation_Board.stl"
+      scale="0.001 0.001 0.001"/>
+
+      <mesh name="adams_apple" file="Adams_Apple.stl" scale="0.001 0.001 0.001"/>
+      <mesh name="brain_freeze" file="Brain_Freeze.stl" scale="0.001 0.001 0.001"/>
+      <mesh name="bread_basket" file="Bread_Basket.stl" scale="0.001 0.001 0.001"/>
+      <mesh name="broken_heart" file="Broken_Heart.stl" scale="0.001 0.001 0.001"/>
+      <mesh name="butterflies_in_stomach" file="Butterflies_In_Stomach.stl" scale="0.001 0.001 0.001"/>
+      <mesh name="charlie_horse" file="Charlie_Horse.stl" scale="0.001 0.001 0.001"/>
+      <mesh name="funny_bone" file="Funny_Bone.stl" scale="0.001 0.001 0.001"/>
+      <mesh name="spare_ribs" file="Spare_Ribs.stl" scale="0.001 0.001 0.001"/>
+      <mesh name="water_on_the_knee" file="Water_On_The_Knee.stl" scale="0.001 0.001 0.001"/>
+      <mesh name="wish_bone" file="Wish_Bone.stl" scale="0.001 0.001 0.001"/>
+      <mesh name="wrenched_ankle" file="Wrenched_Ankle.stl" scale="0.001 0.001 0.001"/>
+      <mesh name="writers_cramp" file="Writers_Cramp.stl" scale="0.001 0.001 0.001"/>
+
+      <!-- Convex collision decomposition -->
+
+
+
+
+
+
+
+<!-- Operation Board intermediate convex decomposition -->
+
+      <include file="operation_board_collision_assets.xml"/>
+
+      <include file="piece_collisions/piece_collision_assets.xml"/>
+
+  </asset>
+
+  <worldbody>
+    <light diffuse=".5 .5 .5" pos="0 0 10" dir="0 0 -1"/>
+    <geom type="plane" size="2 2 1" material="groundplane" pos="0 0 -0.02"/>
+
+    <!-- Operation board -->
+
+    <body name="operation_board_body" pos="0.15 -0.25 0">
+
+      <!-- Visual model -->
+      <geom name="operation_board_visual"
+          type="mesh"
+          mesh="operation_board"
+          rgba="0.35 0.35 0.35 1"
+          contype="0"
+          conaffinity="0"/>
+
+      <!-- DEBUG: CoACD board decomposition -->
+
+      <include file="operation_board_collision_geoms.xml"/>
+
+    
+      <!-- Main solid base of the Operation board -->
+      <geom name="operation_board_base_collision"
+            type="box"
+            pos="0.075 0.050 0.006"
+            size="0.075 0.050 0.006"
+            rgba="0 0.5 1 0"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"
+            mass="0"/>
+
+<!-- ===================================================== -->
+<!-- TRAY COLLIDERS                                         -->
+<!-- ===================================================== -->
+
+      <!-- Tray floor -->
+      <geom name="tray_floor"
+            type="box"
+            pos="0.1675 0.0500 0.0010"
+            size="0.0175 0.0400 0.0010"
+            rgba="0 0 1 0"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"
+            mass="0"/>
+
+      <!-- Right wall -->
+      <geom name="tray_wall_right"
+            type="box"
+            pos="0.1825 0.0500 0.0085"
+            size="0.0025 0.0400 0.0065"
+            rgba="1 0 0 0"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"
+            mass="0"/>
+
+      <!-- Bottom wall -->
+      <geom name="tray_wall_bottom"
+            type="box"
+            pos="0.1675 0.0125 0.0085"
+            size="0.0175 0.0025 0.0065"
+            rgba="1 1 0 0"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"
+            mass="0"/>
+
+      <!-- Top wall -->
+      <geom name="tray_wall_top"
+            type="box"
+            pos="0.1675 0.0875 0.0085"
+            size="0.0175 0.0025 0.0065"
+            rgba="1 1 0 0"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"
+            mass="0"/>
+
+      <!-- Left wall -->
+      <geom name="tray_wall_left"
+            type="box"
+            pos="0.1475 0.0500 0.0085"
+            size="0.0025 0.0400 0.0065"
+            rgba="1 0 0 0"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"
+            mass="0"/>
+
+    </body>
+
+
+
+    <!-- Operation pieces -->
+
+    <body name="adams_apple_body"
+      pos="0.15310417 -0.15546625 0.01260000">
+      <freejoint/>
+
+      <geom name="adams_apple_visual"
+            type="mesh"
+            mesh="adams_apple"
+            rgba="0.8 0.2 0.2 1"
+            contype="0"
+            conaffinity="0"
+            mass="0"/>
+
+      <geom name="adams_apple_collision"
+        type="mesh"
+        mesh="adams_apple"
+        rgba="0 1 0 0"
+        mass="0.03"
+        friction="1 0.005 0.0001"
+        solref="0.002 1"
+        solimp="0.95 0.99 0.001"
+        condim="3"
+        contype="1"
+        conaffinity="1"/>
+    </body>
+
+
+    <body name="brain_freeze_body"
+          pos="0.20990063 -0.16282621 0.01260000">
+      <freejoint/>
+
+      <geom name="brain_freeze_visual"
+            type="mesh"
+            mesh="brain_freeze"
+            rgba="0.8 0.2 0.2 1"
+            contype="0"
+            conaffinity="0"
+            mass="0"/>
+
+      <geom name="brain_freeze_collision"
+        type="mesh"
+        mesh="brain_freeze"
+        rgba="0 1 0 0"
+        mass="0.03"
+        friction="1 0.005 0.0001"
+        solref="0.002 1"
+        solimp="0.95 0.99 0.001"
+        condim="3"
+        contype="1"
+        conaffinity="1"/>
+    </body>
+
+
+    <body name="bread_basket_body"
+          pos="0.21682600 -0.24287435 0.01260000">
+      <freejoint/>
+
+      <geom name="bread_basket_visual"
+            type="mesh"
+            mesh="bread_basket"
+            rgba="0.8 0.2 0.2 1"
+            contype="0"
+            conaffinity="0"
+            mass="0"/>
+
+      <geom name="bread_basket_collision"
+        type="mesh"
+        mesh="bread_basket"
+        rgba="0 1 0 0"
+        mass="0.03"
+        friction="1 0.005 0.0001"
+        solref="0.002 1"
+        solimp="0.95 0.99 0.001"
+        condim="3"
+        contype="1"
+        conaffinity="1"/>
+    </body>
+
+
+    <body name="broken_heart_body"
+          pos="0.17997609 -0.22943027 0.01260000">
+      <freejoint/>
+
+      <geom name="broken_heart_visual"
+            type="mesh"
+            mesh="broken_heart"
+            rgba="0.8 0.2 0.2 1"
+            contype="0"
+            conaffinity="0"
+            mass="0"/>
+
+      <geom name="broken_heart_collision"
+        type="mesh"
+        mesh="broken_heart"
+        rgba="0 1 0 0"
+        mass="0.03"
+        friction="1 0.005 0.0001"
+        solref="0.002 1"
+        solimp="0.95 0.99 0.001"
+        condim="3"
+        contype="1"
+        conaffinity="1"/>
+    </body>
+
+
+    <body name="butterflies_in_stomach_body"
+          pos="0.19582719 -0.17730241 0.01267471">
+      <freejoint/>
+
+      <geom name="butterflies_in_stomach_visual"
+            type="mesh"
+            mesh="butterflies_in_stomach"
+            rgba="0.8 0.2 0.2 1"
+            contype="0"
+            conaffinity="0"
+            mass="0"/>
+
+      <geom name="butterflies_in_stomach_collision"
+        type="mesh"
+        mesh="butterflies_in_stomach"
+        rgba="0 1 0 0"
+        mass="0.03"
+        friction="1 0.005 0.0001"
+        solref="0.002 1"
+        solimp="0.95 0.99 0.001"
+        condim="3"
+        contype="1"
+        conaffinity="1"/>
+    </body>
+
+
+    <body name="charlie_horse_body"
+          pos="0.23423193 -0.17419128 0.01260000">
+      <freejoint/>
+
+      <geom name="charlie_horse_visual"
+            type="mesh"
+            mesh="charlie_horse"
+            rgba="0.8 0.2 0.2 1"
+            contype="0"
+            conaffinity="0"
+            mass="0"/>
+
+      <include file="piece_collisions/charlie_horse_collision_geoms.xml"/>
+
+
+
+
+
+
+</body>
+
+
+    <body name="funny_bone_body"
+          pos="0.21018266 -0.17708883 0.01260000">
+      <freejoint/>
+
+      <geom name="funny_bone_visual"
+            type="mesh"
+            mesh="funny_bone"
+            rgba="0.8 0.2 0.2 1"
+            contype="0"
+            conaffinity="0"
+            mass="0"/>
+
+      <geom name="funny_bone_collision"
+        type="mesh"
+        mesh="funny_bone"
+        rgba="0 1 0 0"
+        mass="0.03"
+        friction="1 0.005 0.0001"
+        solref="0.002 1"
+        solimp="0.95 0.99 0.001"
+        condim="3"
+        contype="1"
+        conaffinity="1"/>
+    </body>
+
+
+    <body name="spare_ribs_body"
+          pos="0.19067239 -0.18475781 0.01341348">
+      <freejoint/>
+
+      <geom name="spare_ribs_visual"
+            type="mesh"
+            mesh="spare_ribs"
+            rgba="0.8 0.2 0.2 1"
+            contype="0"
+            conaffinity="0"
+            mass="0"/>
+
+      <geom name="spare_ribs_collision"
+        type="mesh"
+        mesh="spare_ribs"
+        rgba="0 1 0 0"
+        mass="0.03"
+        friction="1 0.005 0.0001"
+        solref="0.002 1"
+        solimp="0.95 0.99 0.001"
+        condim="3"
+        contype="1"
+        conaffinity="1"/>
+    </body>
+
+
+    <body name="water_on_the_knee_body"
+          pos="0.25931609 -0.21898934 0.01260000">
+      <freejoint/>
+
+      <geom name="water_on_the_knee_visual"
+            type="mesh"
+            mesh="water_on_the_knee"
+            rgba="0.8 0.2 0.2 1"
+            contype="0"
+            conaffinity="0"
+            mass="0"/>
+
+      <geom name="water_on_the_knee_collision"
+        type="mesh"
+        mesh="water_on_the_knee"
+        rgba="0 1 0 0"
+        mass="0.03"
+        friction="1 0.005 0.0001"
+        solref="0.002 1"
+        solimp="0.95 0.99 0.001"
+        condim="3"
+        contype="1"
+        conaffinity="1"/>
+    </body>
+
+
+    <body name="wish_bone_body"
+      pos="0.31803175 -0.17729840 0.01260000">
+
+      <freejoint/>
+
+      <geom name="wish_bone_visual"
+            type="mesh"
+            mesh="wish_bone"
+            rgba="0.8 0.2 0.2 1"
+            contype="0"
+            conaffinity="0"
+            mass="0"/>
+
+      <include file="piece_collisions/wish_bone_collision_geoms.xml"/>
+
+        <!-- Wish Bone convex compound collider -->
+
+
+
+
+
+
+</body>
+
+
+
+    <body name="wrenched_ankle_body"
+          pos="0.26017901 -0.22128007 0.01260000">
+      <freejoint/>
+
+      <geom name="wrenched_ankle_visual"
+            type="mesh"
+            mesh="wrenched_ankle"
+            rgba="0.8 0.2 0.2 1"
+            contype="0"
+            conaffinity="0"
+            mass="0"/>
+
+      <include file="piece_collisions/wrenched_ankle_collision_geoms.xml"/>
+
+
+
+
+
+
+
+</body>
+
+
+    <body name="writers_cramp_body"
+          pos="0.23159668 -0.22801905 0.01295042">
+      <freejoint/>
+
+      <geom name="writers_cramp_visual"
+            type="mesh"
+            mesh="writers_cramp"
+            rgba="0.8 0.2 0.2 1"
+            contype="0"
+            conaffinity="0"
+            mass="0"/>
+
+      <geom name="writers_cramp_collision"
+            type="box"
+            mesh="writers_cramp"
+            rgba="0 1 0 0"
+            mass="0.03"
+            friction="1 0.005 0.0001"
+            solref="0.002 1"
+            solimp="0.95 0.99 0.001"
+            condim="3"
+            contype="1"
+            conaffinity="1"/>
+    </body>
+
+    <!-- Tool -->
+
+    <body name="tool_main_insert_Shape_IndexedFaceSet.030" pos="0.0 0.0 0.0" quat="0.7071068286895752 0.7071067690849304 0.0 0.0">
+      <geom type="mesh" name="tool_main_insert_Shape_IndexedFaceSet.030 geom" mesh="tool_main_insert_Shape_IndexedFaceSet.030" rgba="255.0 1.0 1.0 1.0"/>
+      <freejoint/>
+      <body name="tool_roll_link_Shape_IndexedFaceSet" pos="0.46589118242263794 1.6298145055770874e-08 1.629087265087037e-08" quat="0.7071068286895752 -2.6692537957728746e-08 0.7071067690849304 2.6692536181371906e-08">
+        <joint name="joint_roll" type="hinge" axis="0 0 1" range="-3.14159 3.14159"/>
+        <geom type="mesh" name="tool_roll_link_Shape_IndexedFaceSet geom" mesh="tool_roll_link_Shape_IndexedFaceSet" rgba="1.0 1.0 1.0 1.0"/>
+        
+        <body name="tool_pitch_link_Shape_IndexedFaceSet.014" pos="1.7763568394002505e-15 3.552713678800501e-15 0.0" quat="0.5000000596046448 -0.5 -0.5 -0.4999999701976776">
+          <joint name="joint_pitch" type="hinge" axis="0 0 1" range="-1.5708 1.5708"/>
+          <geom type="mesh" name="tool_pitch_link_Shape_IndexedFaceSet.014 geom" mesh="tool_pitch_link_Shape_IndexedFaceSet.014" rgba="1.0 1.0 1.0 1.0"/>
+          
+          <body name="tool_yaw_link_Shape_IndexedFaceSet.015" pos="0.008991986513137817 -1.2500141565396916e-05 -2.426503442620742e-12" quat="0.7071068286895752 0.7071067690849304 -4.969171724626556e-16 -4.492481823441478e-22">
+            <!-- <joint name="joint_yaw" type="hinge" axis="0 0 1" range="-1.39626 1.39626"/> -->
+            <geom type="mesh" name="tool_yaw_link_Shape_IndexedFaceSet.015 geom" mesh="tool_yaw_link_Shape_IndexedFaceSet.015" rgba="1.0 1.0 1.0 1.0"/>
+            
+            <body name="gripper_left_Shape_IndexedFaceSet.006" pos="0.0 0.0 0.0" quat="0.70710688829422 6.693662195567584e-15 5.3385061704602776e-08 -0.7071066498756409">
+              <joint name="joint_gripper_left" type="hinge" axis="0 0 1" range="0.0 1.0472"/>
+              <geom type="mesh" name="gripper_left_Shape_IndexedFaceSet.006 geom" mesh="gripper_left_Shape_IndexedFaceSet.006" rgba="1.0 1.0 1.0 1.0"/>
+            </body>
+            
+            <body name="gripper_right_Shape_IndexedFaceSet.022" pos="0.0 0.0 0.0" quat="0.70710688829422 6.693662195567584e-15 5.3385061704602776e-08 -0.7071066498756409">
+              <joint name="joint_gripper_right" type="hinge" axis="0 0 -1" range="0.0 1.0472"/>
+              <geom type="mesh" name="gripper_right_Shape_IndexedFaceSet.022 geom" mesh="gripper_right_Shape_IndexedFaceSet.022" rgba="1.0 1.0 1.0 1.0"/>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+    <body mocap="true" name="mocap" pos="0.1 0.1 0.1">
+          <site pos="0 0 0.075" size="0.003 0.003 0.1" type="box" name="mocap_left_site1" rgba="0 0 1 1"/>
+          <site pos="0 0.075 0" size="0.003 0.1 0.003" type="box" name="mocap_left_site2" rgba="0 1 0 1"/>
+          <site pos="0.075 0 0" size="0.1 0.003 0.003" type="box" name="mocap_left_site3" rgba="1 0 0 1"/>
+    </body>
+  </worldbody>
+
+  <asset>
+    <mesh name="tool_main_insert_Shape_IndexedFaceSet.030" file="tool_main_insert_Shape_IndexedFaceSet.030.obj"/>
+    <mesh name="tool_roll_link_Shape_IndexedFaceSet" file="tool_roll_link_Shape_IndexedFaceSet.obj"/>
+    <mesh name="tool_pitch_link_Shape_IndexedFaceSet.014" file="tool_pitch_link_Shape_IndexedFaceSet.014.obj"/>
+    <mesh name="tool_yaw_link_Shape_IndexedFaceSet.015" file="tool_yaw_link_Shape_IndexedFaceSet.015.obj"/>
+    <mesh name="gripper_left_Shape_IndexedFaceSet.006" file="gripper_left_Shape_IndexedFaceSet.006.obj"/>
+    <mesh name="gripper_right_Shape_IndexedFaceSet.022" file="gripper_right_Shape_IndexedFaceSet.022.obj"/>
+  </asset>
+
+  <actuator>
+    <position name="act_roll" joint="joint_roll" kp="100" damping="1"/>
+    <position name="act_pitch" joint="joint_pitch" kp="100" damping="1"/>
+    <!-- <position name="act_yaw" joint="joint_yaw" kp="10" damping="1"/> -->
+    <position name="act_gripper_left" joint="joint_gripper_left" kp="5" damping="0.5"/>
+    <position name="act_gripper_right" joint="joint_gripper_right" kp="5" damping="0.5"/>
+  </actuator>
+
+  <contact>
+    <exclude body1= "tool_main_insert_Shape_IndexedFaceSet.030" body2="tool_roll_link_Shape_IndexedFaceSet"/>
+  </contact>
+
+  <equality>
+    <weld body1="mocap" body2="tool_main_insert_Shape_IndexedFaceSet.030" relpose="0 0 0 1 0 0 0" solref="0.01 1" solimp="0.9 0.95 0.001"/>
+  </equality>
+</mujoco>

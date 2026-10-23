@@ -1,0 +1,10 @@
+<mujocoinclude>
+  <geom name="wrenched_ankle_collision_01" type="mesh" mesh="wrenched_ankle_col_01" rgba="1 1 1 0" mass="0.00150274" friction="1 0.005 0.0001" solref="0.002 1" solimp="0.95 0.99 0.001" condim="3" contype="1" conaffinity="1"/>
+  <geom name="wrenched_ankle_collision_02" type="mesh" mesh="wrenched_ankle_col_02" rgba="1 1 1 0" mass="0.00625213" friction="1 0.005 0.0001" solref="0.002 1" solimp="0.95 0.99 0.001" condim="3" contype="1" conaffinity="1"/>
+  <geom name="wrenched_ankle_collision_03" type="mesh" mesh="wrenched_ankle_col_03" rgba="1 1 1 0" mass="0.00346173" friction="1 0.005 0.0001" solref="0.002 1" solimp="0.95 0.99 0.001" condim="3" contype="1" conaffinity="1"/>
+  <geom name="wrenched_ankle_collision_04" type="mesh" mesh="wrenched_ankle_col_04" rgba="1 1 1 0" mass="0.00194712" friction="1 0.005 0.0001" solref="0.002 1" solimp="0.95 0.99 0.001" condim="3" contype="1" conaffinity="1"/>
+  <geom name="wrenched_ankle_collision_05" type="mesh" mesh="wrenched_ankle_col_05" rgba="1 1 1 0" mass="0.00834016" friction="1 0.005 0.0001" solref="0.002 1" solimp="0.95 0.99 0.001" condim="3" contype="1" conaffinity="1"/>
+  <geom name="wrenched_ankle_collision_06" type="mesh" mesh="wrenched_ankle_col_06" rgba="1 1 1 0" mass="0.00203085" friction="1 0.005 0.0001" solref="0.002 1" solimp="0.95 0.99 0.001" condim="3" contype="1" conaffinity="1"/>
+  <geom name="wrenched_ankle_collision_07" type="mesh" mesh="wrenched_ankle_col_07" rgba="1 1 1 0" mass="0.00156490" friction="1 0.005 0.0001" solref="0.002 1" solimp="0.95 0.99 0.001" condim="3" contype="1" conaffinity="1"/>
+  <geom name="wrenched_ankle_collision_08" type="mesh" mesh="wrenched_ankle_col_08" rgba="1 1 1 0" mass="0.00490037" friction="1 0.005 0.0001" solref="0.002 1" solimp="0.95 0.99 0.001" condim="3" contype="1" conaffinity="1"/>
+</mujocoinclude>

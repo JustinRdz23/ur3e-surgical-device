@@ -6,12 +6,13 @@ import mujoco
 import mujoco.viewer
 import rtde_control
 import rtde_receive
+from pathlib import Path
+
 
 ROBOT_IP = "192.168.0.3" #UR3e
 # ROBOT_IP = "192.168.0.1"  #UR3
 
-MJCF_PATH = "/home/justinrc/workspace/src/dual_servo_ur3e_sim/mjcf/simpletool.xml"
-
+MJCF_PATH = str(Path(__file__).resolve().parent.parent / "mjcf" / "hello.xml")
 TASK_FRAME = [0, 0, 0, 0, 0, 0] #Frame that will applied robot
 SELECTION_VECTOR = [1, 1, 1, 1, 1, 1]
 WRENCH = [0, 0, 0, 0, 0, 0]
@@ -21,7 +22,7 @@ DAMPING = 0.004
 GAIN_SCALING = 1.0
 
 CONTROL_PERIOD_S = 0.002    
-RENDER_EVERY_N_STEPS = 20   
+RENDER_EVERY_N_STEPS = 20       
 
 # Fixed 180-degree rotation about Y, as a quaternion (w, x, y, z).
 Q_OFFSET = np.array([0.0, 0.0, 1.0, 0.0])  # cos(90deg)=0, axis=(0,1,0)*sin(90deg)=1

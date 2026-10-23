@@ -48,12 +48,14 @@
 #include <memory>
 #include <thread>
 #include "ur_client_library/control/reverse_interface.h"
+#include <ament_index_cpp/get_package_share_directory.hpp>
 
 using namespace urcl;
-const std::string SCRIPT_FILE = "/home/justinrc/workspace/src/dual_servo_ur3e/resources/external_control.urscript";
-const std::string OUTPUT_RECIPE = "/home/justinrc/workspace/src/dual_servo_ur3e/resources/rtde_output_recipe.txt";
-const std::string INPUT_RECIPE = "/home/justinrc/workspace/src/dual_servo_ur3e/resources/rtde_input_recipe_force_mode.txt";
 
+const std::string PKG_SHARE = ament_index_cpp::get_package_share_directory("dual_servo_ur3e");
+const std::string SCRIPT_FILE  = PKG_SHARE + "/resources/external_control.urscript";
+const std::string OUTPUT_RECIPE = PKG_SHARE + "/resources/rtde_output_recipe.txt";
+const std::string INPUT_RECIPE  = PKG_SHARE + "/resources/rtde_input_recipe_force_mode.txt";
 // Known robots, by label.
 const std::map<std::string, std::string> KNOWN_ROBOTS = {
   { "ur3e", "192.168.0.3" },

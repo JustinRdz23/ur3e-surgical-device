@@ -1,5 +1,5 @@
 <mujoco model="dvrk_large_needle_driver">
-  <compiler angle = "degree" meshdir="/home/justinrc/workspace/src/dual_servo_ur3e_sim/mesh/high_res"/>
+  <compiler angle = "degree" meshdir="/home/xpatricia-garcia/repos/medicalUR/ur3e-surgical-device/src/dual_servo_ur3e_sim/mesh/high_res"/>
   <asset>
       <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
       <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"

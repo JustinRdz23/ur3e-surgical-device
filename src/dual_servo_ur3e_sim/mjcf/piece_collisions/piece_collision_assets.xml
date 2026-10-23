@@ -1,0 +1,24 @@
+<mujocoinclude>
+  <mesh name="charlie_horse_col_01" file="charlie_horse_collision/Charlie_Horse_col_01.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="charlie_horse_col_02" file="charlie_horse_collision/Charlie_Horse_col_02.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="charlie_horse_col_03" file="charlie_horse_collision/Charlie_Horse_col_03.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="charlie_horse_col_04" file="charlie_horse_collision/Charlie_Horse_col_04.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="charlie_horse_col_05" file="charlie_horse_collision/Charlie_Horse_col_05.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="charlie_horse_col_06" file="charlie_horse_collision/Charlie_Horse_col_06.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="charlie_horse_col_07" file="charlie_horse_collision/Charlie_Horse_col_07.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="wish_bone_col_01" file="wish_bone_collision/Wish_Bone_col_01.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="wish_bone_col_02" file="wish_bone_collision/Wish_Bone_col_02.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="wish_bone_col_03" file="wish_bone_collision/Wish_Bone_col_03.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="wish_bone_col_04" file="wish_bone_collision/Wish_Bone_col_04.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="wish_bone_col_05" file="wish_bone_collision/Wish_Bone_col_05.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="wish_bone_col_06" file="wish_bone_collision/Wish_Bone_col_06.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="wish_bone_col_07" file="wish_bone_collision/Wish_Bone_col_07.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="wrenched_ankle_col_01" file="wrenched_ankle_collision/Wrenched_Ankle_col_01.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="wrenched_ankle_col_02" file="wrenched_ankle_collision/Wrenched_Ankle_col_02.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="wrenched_ankle_col_03" file="wrenched_ankle_collision/Wrenched_Ankle_col_03.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="wrenched_ankle_col_04" file="wrenched_ankle_collision/Wrenched_Ankle_col_04.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="wrenched_ankle_col_05" file="wrenched_ankle_collision/Wrenched_Ankle_col_05.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="wrenched_ankle_col_06" file="wrenched_ankle_collision/Wrenched_Ankle_col_06.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="wrenched_ankle_col_07" file="wrenched_ankle_collision/Wrenched_Ankle_col_07.obj" scale="0.001 0.001 0.001"/>
+  <mesh name="wrenched_ankle_col_08" file="wrenched_ankle_collision/Wrenched_Ankle_col_08.obj" scale="0.001 0.001 0.001"/>
+</mujocoinclude>

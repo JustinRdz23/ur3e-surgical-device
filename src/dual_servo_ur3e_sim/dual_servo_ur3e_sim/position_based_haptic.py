@@ -35,12 +35,25 @@ FRAME_OFFSET_POS = np.array([0.0, 0.0, 0.8])
 ARROW_LENGTH_SCALE = 0.01
 ARROW_WIDTH = 0.004
 
-STIFFNESS_LIN = 2200.0
+STIFFNESS_LIN = 2800.0
 DAMPING_LIN = 15.0
 FORCE_SCALE = 0.4
 MAX_FORCE = 100.0
 INTERNAL_MAX_FORCE = 100.0
 
+
+def rotvec_to_quat(rotvec):
+    """Converts a rotation vector (Axis-Angle) from UR RTDE to a MuJoCo quaternion [w, x, y, z]."""
+    angle = np.linalg.norm(rotvec)
+    quat = np.zeros(4)
+    if angle < 1e-6:
+        quat[0] = 1.0  # Identity quaternion
+    else:
+        axis = rotvec / angle
+        half_angle = angle / 2.0
+        quat[0] = np.cos(half_angle)
+        quat[1:4] = axis * np.sin(half_angle)
+    return quat
 
 
 def draw_force_arrow(viewer, start, force_vec):
@@ -120,6 +133,7 @@ def main():
 
                 current_pose = rtde_r.getActualTCPPose()
 
+                # --- 1. Position Transformation ---
                 pos_transformed = np.zeros(3)
 
                 mujoco.mju_rotVecQuat(
@@ -129,8 +143,18 @@ def main():
                 )
 
                 pos_transformed += FRAME_OFFSET_POS
-
                 data.mocap_pos[0] = pos_transformed
+
+                # --- 2. Rotation Transformation ---
+                # Convert UR rotvec [rx, ry, rz] to quaternion [w, x, y, z]
+                quat_tcp = rotvec_to_quat(np.array(current_pose[3:6]))
+
+                # Multiply frame offset rotation with TCP orientation: Q_OFFSET * Q_TCP
+                quat_transformed = np.zeros(4)
+                mujoco.mju_mulQuat(quat_transformed, Q_OFFSET, quat_tcp)
+
+                # Set mocap rotation target
+                data.mocap_quat[0] = quat_transformed
 
                 elapsed_since_start = (
                     time.time() - program_start_time
@@ -153,6 +177,7 @@ def main():
                     if elapsed_since_start >= STARTUP_DELAY_S:
 
                         data.qpos[0:3] = data.mocap_pos[0]
+                        data.qpos[3:7] = data.mocap_quat[0]  # Set orientation qpos for freejoint
 
                         data.qvel[0:3] = 0.0
                         data.qvel[3:6] = 0.0

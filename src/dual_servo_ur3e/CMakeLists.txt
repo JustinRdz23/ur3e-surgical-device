@@ -57,6 +57,11 @@ install(TARGETS freedrive_mode
   DESTINATION lib/${PROJECT_NAME})
 
 install(DIRECTORY
+  resources
+  DESTINATION share/${PROJECT_NAME}
+)
+
+install(DIRECTORY
   urdf
   launch
   config

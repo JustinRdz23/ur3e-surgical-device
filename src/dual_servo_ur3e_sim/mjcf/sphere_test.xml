@@ -11,7 +11,7 @@
 </body>
 
     <!-- Obstacle to push -->
-    <body name="box" pos="0 -0.08 0.2">
+    <body name="box" pos="0 -0.3 0.2">
       <geom name="box_geom" type="box" size="0.2 0.2 0.2" mass="0.2" rgba="0.8 0.2 0.2 1"/>
     </body>
 

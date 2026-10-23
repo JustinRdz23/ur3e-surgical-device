@@ -21,7 +21,7 @@ import mujoco
 import mujoco.viewer
 import glfw
 
-MJCF_PATH = "/home/justinrc/workspace/src/dual_servo_ur3e_sim/mjcf/hello.xml"
+MJCF_PATH = "/home/xpatricia-garcia/repos/medicalUR/ur3e-surgical-device/src/dual_servo_ur3e_sim/mjcf/hello.xml"
 
 MOCAP_ID = 0  # index of the mocap body in mocap_pos/mocap_quat
 

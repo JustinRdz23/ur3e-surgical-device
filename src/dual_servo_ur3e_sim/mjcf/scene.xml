@@ -1,5 +1,5 @@
 <mujoco model="laparoscopic_trainer">
-  <compiler angle="degree" meshdir="/home/justinrc/workspace/src/dual_servo_ur3e_sim/mesh/high_res"/>
+  <compiler angle="degree" meshdir="/home/xpatricia-garcia/repos/medicalUR/ur3e-surgical-device/src/dual_servo_ur3e_sim/mesh/high_res"/>
 
   <!-- ── Physics & rendering options ─────────────────────────────────────── -->
   <option gravity="0 0 -9.81" timestep="0.002"/>
