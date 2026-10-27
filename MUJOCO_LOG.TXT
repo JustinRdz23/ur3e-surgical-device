@@ -40,3 +40,15 @@ WARNING Mon Oct  5 20:06:57 2026: Nan, Inf or huge value in QACC at DOF 0. The s
 
 WARNING Mon Oct  5 20:24:53 2026: Nan, Inf or huge value in QACC at DOF 0. The simulation is unstable. Time = 0.3880.
 
+WARNING Thu Oct 22 21:36:52 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
+WARNING Thu Oct 22 21:36:52 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
+WARNING Thu Oct 22 21:39:50 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
+WARNING Thu Oct 22 21:39:50 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+

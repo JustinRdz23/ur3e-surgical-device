@@ -61,7 +61,7 @@ const std::map<std::string, std::string> KNOWN_ROBOTS = {
   { "ur3e", "192.168.0.3" },
   { "ur3",  "192.168.0.1" },
 };
-const std::string DEFAULT_ROBOT_IP = KNOWN_ROBOTS.at("ur3e");
+const std::string DEFAULT_ROBOT_IP = KNOWN_ROBOTS.at("ur3");
 
 std::unique_ptr<ExampleRobotWrapper> g_my_robot;
 
