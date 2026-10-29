@@ -9,8 +9,8 @@ import rtde_receive
 from pathlib import Path
 
 
-ROBOT_IP = "192.168.0.3" #UR3e
-# ROBOT_IP = "192.168.0.1"  #UR3
+# ROBOT_IP = "192.168.0.3" #UR3e
+ROBOT_IP = "192.168.0.1"  #UR3
 
 MJCF_PATH = str(Path(__file__).resolve().parent.parent / "mjcf" / "hello.xml")
 TASK_FRAME = [0, 0, 0, 0, 0, 0] #Frame that will applied robot
@@ -74,7 +74,7 @@ def main():
     rtde_c = rtde_control.RTDEControlInterface(ROBOT_IP)
     rtde_r = rtde_receive.RTDEReceiveInterface(ROBOT_IP)
     print("Connected.")
-
+    
     time.sleep(1.0)  
     rtde_c.zeroFtSensor()
     rtde_c.forceModeSetDamping(DAMPING)
