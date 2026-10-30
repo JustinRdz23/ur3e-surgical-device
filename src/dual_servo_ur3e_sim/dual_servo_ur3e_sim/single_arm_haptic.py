@@ -1,3 +1,4 @@
+import argparse
 import time
 import signal
 import sys
@@ -9,8 +10,10 @@ import rtde_receive
 from pathlib import Path
 
 
-# ROBOT_IP = "192.168.0.3" #UR3e
-ROBOT_IP = "192.168.0.1"  #UR3
+ROBOT_IPS = {
+    "ur3": "192.168.0.1",
+    "ur3e": "192.168.0.3",
+}
 
 MJCF_PATH = str(Path(__file__).resolve().parent.parent / "mjcf" / "hello.xml")
 TASK_FRAME = [0, 0, 0, 0, 0, 0] #Frame that will applied robot
@@ -67,12 +70,22 @@ def draw_force_arrow(viewer, start, force_vec):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Run single-arm MuJoCo haptic teleoperation.")
+    parser.add_argument(
+        "--robot",
+        choices=ROBOT_IPS,
+        default="ur3e",
+        help="robot to connect to (default: ur3e)",
+    )
+    args = parser.parse_args()
+    robot_ip = ROBOT_IPS[args.robot]
+
     model = mujoco.MjModel.from_xml_path(MJCF_PATH)
     data = mujoco.MjData(model)
 
-    print(f"Connecting to robot at {ROBOT_IP}...")
-    rtde_c = rtde_control.RTDEControlInterface(ROBOT_IP)
-    rtde_r = rtde_receive.RTDEReceiveInterface(ROBOT_IP)
+    print(f"Connecting to {args.robot.upper()} at {robot_ip}...")
+    rtde_c = rtde_control.RTDEControlInterface(robot_ip)
+    rtde_r = rtde_receive.RTDEReceiveInterface(robot_ip)
     print("Connected.")
     
     time.sleep(1.0)  

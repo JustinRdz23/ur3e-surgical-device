@@ -1,12 +1,18 @@
+import argparse
 import time
+from pathlib import Path
+
 import numpy as np
 import mujoco
 import mujoco.viewer
 import rtde_control
 import rtde_receive
 
-ROBOT_IP = "192.168.0.3"
-MJCF_PATH = "/home/justinrc/workspace/src/dual_servo_ur3e_sim/mjcf/sphere_test.xml"
+ROBOT_IPS = {
+    "ur3": "192.168.0.1",
+    "ur3e": "192.168.0.3",
+}
+MJCF_PATH = Path(__file__).resolve().parent.parent / "mjcf" / "sphere_test.xml"
 
 TASK_FRAME = [0, 0, 0, 0, 0, 0]
 SELECTION_VECTOR = [1, 1, 1, 1, 1, 1]
@@ -89,7 +95,19 @@ def draw_force_arrow(viewer, start, force_vec):
 
 
 def main():
-    model = mujoco.MjModel.from_xml_path(MJCF_PATH)
+    parser = argparse.ArgumentParser(
+        description="Run the MuJoCo haptic algorithm test."
+    )
+    parser.add_argument(
+        "--robot",
+        choices=ROBOT_IPS,
+        default="ur3e",
+        help="robot to connect to (default: ur3e)",
+    )
+    args = parser.parse_args()
+    robot_ip = ROBOT_IPS[args.robot]
+
+    model = mujoco.MjModel.from_xml_path(str(MJCF_PATH))
     data = mujoco.MjData(model)
 
     sphere_id = mujoco.mj_name2id(
@@ -103,8 +121,9 @@ def main():
             "Could not find body named 'sphere' in the MJCF."
         )
 
-    rtde_c = rtde_control.RTDEControlInterface(ROBOT_IP)
-    rtde_r = rtde_receive.RTDEReceiveInterface(ROBOT_IP)
+    print(f"Connecting to {args.robot.upper()} at {robot_ip}...")
+    rtde_c = rtde_control.RTDEControlInterface(robot_ip)
+    rtde_r = rtde_receive.RTDEReceiveInterface(robot_ip)
 
     time.sleep(1.0)
 

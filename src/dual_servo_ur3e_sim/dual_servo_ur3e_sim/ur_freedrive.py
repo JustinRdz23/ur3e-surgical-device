@@ -4,6 +4,8 @@ Manda URScript por el puerto 30002 y lee las juntas del stream de 30003.
 Funciona en CB3 y e-Series (en e-Series, ponerlo en Remote Control si hace falta).
 
     python3 ur_freedrive.py                     # todas las juntas libres
+    python3 ur_freedrive.py --robot both        # UR3 y UR3e a la vez
+    python3 ur_freedrive.py --robot ur3e        # seleccionar el UR3e
     python3 ur_freedrive.py --axes 0 0 0 1 1 1  # solo rotaciones libres (requiere software reciente)
 
 Enter o Ctrl+C sale de freedrive.
@@ -14,8 +16,10 @@ import struct
 import threading
 import time
 
-ROBOT_IP = "192.168.0.3"  # UR3e
-# ROBOT_IP = "192.168.0.1"  # UR3
+ROBOT_IPS = {
+    "ur3": "192.168.0.1",
+    "ur3e": "192.168.0.3",
+}
 
 SCRIPT_PORT = 30002
 STREAM_PORT = 30003
@@ -68,42 +72,86 @@ def read_q_actual(sock):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--ip", default=ROBOT_IP)
+    ap.add_argument(
+        "--robot",
+        choices=(*ROBOT_IPS, "both"),
+        default="ur3",
+        help="robot to connect to, or both (default: ur3)",
+    )
+    ap.add_argument(
+        "--ip",
+        help="override the selected robot's IP address",
+    )
     ap.add_argument("--axes", type=int, nargs=6, default=[1, 1, 1, 1, 1, 1], metavar="A",
                     help="ejes libres x y z rx ry rz (1 = libre, 0 = bloqueado)")
     args = ap.parse_args()
 
-    print(f"Connecting to robot at {args.ip}...")
-    cmd = socket.create_connection((args.ip, SCRIPT_PORT), timeout=5)
-    stream = socket.create_connection((args.ip, STREAM_PORT), timeout=5)
+    if args.robot == "both" and args.ip:
+        ap.error("--ip cannot be used with --robot both")
 
+    targets = (
+        list(ROBOT_IPS.items())
+        if args.robot == "both"
+        else [(args.robot, args.ip or ROBOT_IPS[args.robot])]
+    )
+    command_sockets = {}
+    stream_sockets = {}
     stop = threading.Event()
-    threading.Thread(target=lambda: (input(), stop.set()), daemon=True).start()
 
     try:
-        cmd.sendall(freedrive_script(args.axes).encode())
-        print(f"Freedrive activo, ejes libres {args.axes}. Enter o Ctrl+C para salir.")
+        for robot, robot_ip in targets:
+            print(f"Connecting to {robot.upper()} at {robot_ip}...")
+            command_sockets[robot] = socket.create_connection(
+                (robot_ip, SCRIPT_PORT),
+                timeout=5,
+            )
+            stream_sockets[robot] = socket.create_connection(
+                (robot_ip, STREAM_PORT),
+                timeout=5,
+            )
+
+        script = freedrive_script(args.axes).encode()
+        for cmd in command_sockets.values():
+            cmd.sendall(script)
+
+        threading.Thread(target=lambda: (input(), stop.set()), daemon=True).start()
+        print(
+            f"Freedrive active on {', '.join(robot.upper() for robot, _ in targets)}; "
+            f"axes {args.axes}. Press Enter or Ctrl+C to exit."
+        )
         last_print = 0.0
         while not stop.is_set():
-            q = read_q_actual(stream)  # bloquea ~8 ms (125 Hz en CB3)
+            joint_positions = {
+                robot: read_q_actual(stream)
+                for robot, stream in stream_sockets.items()
+            }
             now = time.monotonic()
             if now - last_print >= STATUS_PERIOD_S:
-                print("  q [deg]: " + "  ".join(f"{v * 57.2958:7.1f}" for v in q), end="\r")
+                status = " | ".join(
+                    f"{robot.upper()} q [deg]: "
+                    + "  ".join(f"{value * 57.2958:7.1f}" for value in joints)
+                    for robot, joints in joint_positions.items()
+                )
+                print(status, end="\r")
                 last_print = now
     except KeyboardInterrupt:
         pass
     except (ConnectionError, socket.timeout, OSError) as e:
-        print(f"\nError de conexion: {e}")
+        print(f"\nConnection error: {e}")
     finally:
         print("\nEnding freedrive and disconnecting...")
-        try:
-            # enviar un script nuevo reemplaza al que corre; cerrar el socket NO detiene freedrive
-            cmd.sendall(STOP_SCRIPT.encode())
+        for robot, cmd in command_sockets.items():
+            try:
+                # Closing a socket alone does not stop freedrive; send URScript to end it.
+                cmd.sendall(STOP_SCRIPT.encode())
+            except OSError as e:
+                print(f"  Could not stop {robot.upper()} cleanly: {e}")
+        if command_sockets:
             time.sleep(0.5)
-        except OSError as e:
-            print(f"  (no se pudo cerrar limpio: {e})")
-        cmd.close()
-        stream.close()
+        for cmd in command_sockets.values():
+            cmd.close()
+        for stream in stream_sockets.values():
+            stream.close()
         print("Done.")
 
 
