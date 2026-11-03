@@ -28,3 +28,57 @@ timestep: parent has 0.0005, child has 0.002, keeping parent value
 WARNING Mon Nov  2 19:56:48 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
 timestep: parent has 0.0005, child has 0.002, keeping parent value
 
+WARNING Mon Nov  2 20:09:13 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
+WARNING Mon Nov  2 20:09:13 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
+WARNING Mon Nov  2 21:57:27 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
+WARNING Mon Nov  2 21:57:27 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
+WARNING Mon Nov  2 22:01:18 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
+WARNING Mon Nov  2 22:01:18 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
+WARNING Mon Nov  2 22:03:03 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
+WARNING Mon Nov  2 22:03:03 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
+WARNING Mon Nov  2 22:06:50 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
+WARNING Mon Nov  2 22:06:50 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
+WARNING Mon Nov  2 22:07:45 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
+WARNING Mon Nov  2 22:07:45 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
+WARNING Mon Nov  2 22:11:13 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
+WARNING Mon Nov  2 22:11:13 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
+WARNING Mon Nov  2 22:13:00 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
+WARNING Mon Nov  2 22:13:00 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
+WARNING Mon Nov  2 22:13:22 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
+WARNING Mon Nov  2 22:13:22 2026: Attach conflict when attaching 'dvrk_tool' to 'dual_tool_scene', policy is 'warning'
+timestep: parent has 0.0005, child has 0.002, keeping parent value
+
