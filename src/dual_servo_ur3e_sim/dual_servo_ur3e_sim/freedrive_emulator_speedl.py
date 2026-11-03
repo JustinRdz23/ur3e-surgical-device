@@ -1,4 +1,3 @@
-
 import sys
 
 import rtde_control
@@ -11,7 +10,7 @@ ROBOT_IP = sys.argv[1] if len(sys.argv) > 1 else "192.168.0.3"
 FORCE_GAIN = 0.006       # m/s per N
 TORQUE_GAIN = 0.30       # rad/s per Nm
 
-FORCE_DEADBAND = 3.0     # N
+FORCE_DEADBAND = 3.0     #  N
 TORQUE_DEADBAND = 0.5    # Nm
 
 MAX_LINEAR_SPEED = 0.03  # m/s

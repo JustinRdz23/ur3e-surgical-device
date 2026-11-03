@@ -39,7 +39,7 @@ RENDER_EVERY_N_LOOPS = 10
 # Fixed 180-degree rotation about Y, quaternion (w, x, y, z), robot base -> MuJoCo world.
 Q_OFFSET = np.array([0.0, 0.0, 1.0, 0.0])
 
-# Where each robot's base origin sits in MuJoCo world coordinates.  CALIBRATE these.
+# Where each robot's base origin sits in MuJoCo world coordinates. 
 FRAME_OFFSETS = {
     "left": np.array([0.0, 0.0, 0.8]),
     "right": np.array([0.0, 0.0, 0.8]),
