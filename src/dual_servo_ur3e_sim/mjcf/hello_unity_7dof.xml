@@ -29,6 +29,7 @@
           <body name="tool_yaw_link_Shape_IndexedFaceSet.015" pos="0.008991986513137817 -1.2500141565396916e-05 -2.426503442620742e-12" quat="0.7071068286895752 0.7071067690849304 -4.969171724626556e-16 -4.492481823441478e-22">
             <joint name="joint_yaw" type="hinge" axis="0 0 1" range="-1.5708 1.5708"/>
             <geom type="mesh" name="tool_yaw_link_Shape_IndexedFaceSet.015 geom" mesh="tool_yaw_link_Shape_IndexedFaceSet.015" rgba="1.0 1.0 1.0 1.0"/>
+            <site name="ee" pos="0 0 0" size="0.002" rgba="1 0 0 1"/>
 
             <body name="gripper_left_Shape_IndexedFaceSet.006" pos="0.0 0.0 0.0" quat="0.70710688829422 6.693662195567584e-15 5.3385061704602776e-08 -0.7071066498756409">
               <joint name="joint_gripper_left" type="hinge" axis="0 0 1" range="0.0 1.0472"/>
