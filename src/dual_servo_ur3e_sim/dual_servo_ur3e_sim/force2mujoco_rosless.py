@@ -6,11 +6,13 @@ import mujoco
 import mujoco.viewer
 import rtde_control
 import rtde_receive
+from pathlib import Path
+
 
 ROBOT_IP = "192.168.0.3" #UR3e
 # ROBOT_IP = "192.168.0.1"  #UR3
 
-MJCF_PATH = "/home/xpatricia-garcia/repos/medicalUR/ur3e-surgical-device/src/dual_servo_ur3e_sim/mjcf/hello.xml"
+MJCF_PATH = str(Path(__file__).resolve().parent.parent / "mjcf" / "hello.xml")
 
 TASK_FRAME = [0, 0, 0, 0, 0, 0] #Frame that will applied robot
 SELECTION_VECTOR = [1, 1, 1, 1, 1, 1]
