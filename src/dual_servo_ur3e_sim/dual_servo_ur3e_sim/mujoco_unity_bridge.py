@@ -394,9 +394,25 @@ def read_contacts(model, data, names, jaw_ids):
 PRIM_TYPES = {int(mujoco.mjtGeom.mjGEOM_BOX): "box", int(mujoco.mjtGeom.mjGEOM_SPHERE): "sphere"}
 
 
-def body_poses(data, body_names):
-    return {n: r6(pos_to_unity(data.xpos[i + 1]) + quat_to_unity(data.xquat[i + 1]))
-            for i, n in enumerate(body_names)}
+def body_poses(model, data, body_names):
+    out = {}
+
+    for name in body_names:
+        body_id = mujoco.mj_name2id(
+            model,
+            mujoco.mjtObj.mjOBJ_BODY,
+            name,
+        )
+
+        if body_id < 0:
+            continue
+
+        out[name] = r6(
+            pos_to_unity(data.xpos[body_id])
+            + quat_to_unity(data.xquat[body_id])
+        )
+
+    return out
 
 
 def scene_prims(model, data):

@@ -124,12 +124,12 @@ WRENCH = [
 FORCE_TYPE = 2
 
 LIMITS = [
-    0.1,
-    0.1,
-    1.5,
-    3.14,
-    3.14,
-    0.5,
+    0.03,
+    0.03,
+    0.03,
+    0.20,
+    0.20,
+    0.20,
 ]
 
 DAMPING = 0.004
@@ -1558,6 +1558,7 @@ def main():
 
                         "bodies":
                         body_poses(
+                            model,
                             data,
                             packet_bodies,
                         ),
