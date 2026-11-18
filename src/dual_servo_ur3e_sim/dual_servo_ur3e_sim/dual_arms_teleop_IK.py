@@ -5,7 +5,6 @@ import time
 from pathlib import Path
 
 import mujoco
-import mujoco.glfw
 import mujoco.viewer
 import numpy as np
 import rtde_control
@@ -73,12 +72,14 @@ TASK_FRAME = [0, 0, 0, 0, 0, 0]
 SELECTION_VECTOR = [1, 1, 1, 1, 1, 1]
 WRENCH = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # zero wrench: the starting point for every arm
 FORCE_TYPE = 2
-LIMITS = [0.1, 0.1, 1.5, 3.14, 3.14, 0.5]
+# Speed caps on the compliant axes (m/s for the first three, rad/s for the last three).
+# The rotation caps were 3.14, 3.14 and are now 1.5: a hard ceiling, enforced by the robot
+# controller itself, on how fast a torque can spin the wrist.
+LIMITS = [0.1, 0.1, 1.5, 1.5, 1.5, 0.5]
 DAMPING = 0.004
 GAIN_SCALING = 1.0
 
 CONTROL_PERIOD_S = 0.008
-RENDER_EVERY_N_LOOPS = 2
 
 # =====================================================================
 # Coordinate transforms
@@ -103,10 +104,6 @@ SCALE = 0.5
 # Haptic feedback (virtual coupling, as in the sphere test)
 # =====================================================================
 
-# A spring-damper couples the hand's target (the IK target) to the tool's end effector.
-# When the tool is blocked, the gap between them grows and the reaction force is sent to
-# the UR arm as the forceMode wrench. Unlike the sphere test, the tool is driven by the IK
-# and its position actuators, so the coupling force is computed but not applied to the tool.
 HAPTICS_ENABLED = True
 
 STIFFNESS_LIN = 2800.0  # N/m
@@ -121,8 +118,27 @@ HAPTIC_RAMP_S = 1.0  # then ramp the force in over this long
 HAPTIC_MAX_DT_S = 0.05  # a loop cycle slower than this sends zero force (stall protection)
 HAPTIC_PRINT_EVERY_N_LOOPS = 100
 
-ARROW_LENGTH_SCALE = 0.01  # metres of arrow per newton
-ARROW_WIDTH = 0.004
+# =====================================================================
+# Torque haptics (rotational virtual coupling)
+# =====================================================================
+
+# The same idea as the force coupling, for orientation: a torsional spring-damper couples the
+# target orientation (from the hand) to the tool's end-effector orientation. When the tool
+# cannot follow the rotation, the reaction torque is sent to the UR arm in WRENCH[3:6].
+TORQUE_HAPTICS_ENABLED = True
+
+STIFFNESS_ROT = 6.0  # N·m/rad
+DAMPING_ROT = 0.05  # N·m/(rad/s)
+ROT_DEADBAND_RAD = 0.05  # rotation gaps below this render no torque (about 3 degrees)
+TORQUE_VEL_FILTER = 0.3  # 0..1: weight of the newest rate sample (smaller = smoother)
+INTERNAL_MAX_TORQUE = 5.0  # clip of the coupling torque, by norm (N·m)
+TORQUE_SCALE = 0.5  # gain from tool torque to hand torque
+MAX_TORQUE = 1.0  # clip of the torque sent to each robot, by norm (N·m). Raise gradually.
+
+# Protection against harsh or runaway rotation:
+MAX_TORQUE_RATE = 10.0  # N·m/s: the sent torque can change no faster than this
+OMEGA_SOFT = 0.6  # rad/s: above this TCP rotation speed the torque starts to fade out
+OMEGA_HARD = 1.5  # rad/s: at this speed (or faster) the torque is zero
 
 # =====================================================================
 # MuJoCo helpers
@@ -164,27 +180,6 @@ def vector_to_htm(tcp_vector):
     mat[:3, 3] = tcp_vector[:3]
     mat[:3, :3] = R.from_rotvec(tcp_vector[3:]).as_matrix()
     return mat
-
-
-def transform_world_point_to_site_frame(
-    model, data, site_name: str, p_world: np.ndarray
-) -> np.ndarray:
-    mujoco.mj_forward(model, data)
-    site_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, site_name)
-    if site_id == -1:
-        raise ValueError(f"Site '{site_name}' not found.")
-
-    p_rb_world = data.site_xpos[site_id]
-    R_world_rb = data.site_xmat[site_id].reshape(3, 3)
-    R_transpose = R_world_rb.T
-
-    T_rb_world = np.eye(4)
-    T_rb_world[:3, :3] = R_transpose
-    T_rb_world[:3, 3] = -R_transpose @ p_rb_world
-
-    p_world_homog = np.array([p_world[0], p_world[1], p_world[2], 1.0])
-    p_rb_homog = T_rb_world @ p_world_homog
-    return p_rb_homog[:3]
 
 
 def site_pose_rb(ik, data):
@@ -241,22 +236,37 @@ def disable_mocap_welds(model, data, mocap_body_ids):
 # =====================================================================
 
 
+def clip_norm(vec, limit):
+    """Scales vec down so its length is at most `limit`. Keeps its direction."""
+    n = np.linalg.norm(vec)
+    if n > limit:
+        return vec * (limit / n)
+    return vec
+
+
+def slew_limit_norm(current, target, max_step):
+    """Moves `current` toward `target`, but by no more than `max_step` (in length) per call."""
+    delta = target - current
+    n = np.linalg.norm(delta)
+    if n > max_step:
+        delta = delta * (max_step / n)
+    return current + delta
+
+
+def speed_taper(omega):
+    """1 at slow rotation speeds, falling linearly to 0 at OMEGA_HARD."""
+    if omega <= OMEGA_SOFT:
+        return 1.0
+    if omega >= OMEGA_HARD:
+        return 0.0
+    return (OMEGA_HARD - omega) / (OMEGA_HARD - OMEGA_SOFT)
+
+
 def coupling_force_on_hand(p_target, p_ee, prev_gap, dt, M):
-    """Virtual coupling between the IK target and the tool's end effector.
-
-    p_target : where the hand wants the tool, in {RB}
-    p_ee     : where the tool's end effector is, in {RB}
-    prev_gap : the gap from the previous loop, for the damping term
-    dt       : time since the previous loop
-    M        : rotation from the UR base axes to {RB} (R_RB_H)
-
-    Returns (force on the hand in the UR base frame, force on the hand in {RB}, gap).
-    """
+    """Virtual coupling between the IK target and the tool's end effector."""
     gap = p_target - p_ee
     gap_vel = (gap - prev_gap) / dt
 
-    # Soft deadband: the first GAP_DEADBAND_M of the gap renders nothing, so the tool's
-    # ordinary tracking lag does not push back on the hand.
     gap_norm = np.linalg.norm(gap)
     if gap_norm > GAP_DEADBAND_M:
         gap_eff = gap * (gap_norm - GAP_DEADBAND_M) / gap_norm
@@ -264,42 +274,34 @@ def coupling_force_on_hand(p_target, p_ee, prev_gap, dt, M):
     else:
         proxy_force = np.zeros(3)
 
-    # Force the spring-damper puts on the tool, then the equal and opposite force on the hand.
     proxy_force = np.clip(proxy_force, -INTERNAL_MAX_FORCE, INTERNAL_MAX_FORCE)
     force_on_hand_rb = -proxy_force
 
-    # {RB} -> UR base axes, scaled and limited.
     force_on_hand_h = FORCE_SCALE * (M.T @ force_on_hand_rb)
     force_on_hand_h = np.clip(force_on_hand_h, -MAX_FORCE, MAX_FORCE)
 
     return force_on_hand_h, force_on_hand_rb, gap
 
 
-def draw_force_arrows(viewer, arrows):
-    """Draws one red arrow per (start, force) pair, in world coordinates."""
-    scn = viewer.user_scn
-    scn.ngeom = 0
+def coupling_torque_on_hand(R_target, R_ee, prev_gap, prev_vel, dt, M):
+    """Rotational virtual coupling between the IK target orientation and the tool's."""
+    gap = R.from_matrix(R_target @ R_ee.T).as_rotvec()
+    gap_vel = TORQUE_VEL_FILTER * (gap - prev_gap) / dt + (1.0 - TORQUE_VEL_FILTER) * prev_vel
 
-    for start, force in arrows:
-        if np.linalg.norm(force) < 1e-6:
-            continue
+    gap_norm = np.linalg.norm(gap)
+    if gap_norm > ROT_DEADBAND_RAD:
+        gap_eff = gap * (gap_norm - ROT_DEADBAND_RAD) / gap_norm
+        proxy_torque = STIFFNESS_ROT * gap_eff + DAMPING_ROT * gap_vel
+    else:
+        proxy_torque = np.zeros(3)
 
-        mujoco.mjv_initGeom(
-            scn.geoms[scn.ngeom],
-            type=mujoco.mjtGeom.mjGEOM_ARROW,
-            size=np.zeros(3),
-            pos=np.zeros(3),
-            mat=np.eye(3).flatten(),
-            rgba=np.array([1.0, 0.0, 0.0, 1.0], dtype=np.float32),
-        )
-        mujoco.mjv_connector(
-            scn.geoms[scn.ngeom],
-            mujoco.mjtGeom.mjGEOM_ARROW,
-            ARROW_WIDTH,
-            start,
-            start + force * ARROW_LENGTH_SCALE,
-        )
-        scn.ngeom += 1
+    proxy_torque = clip_norm(proxy_torque, INTERNAL_MAX_TORQUE)
+    torque_on_hand_rb = -proxy_torque
+
+    torque_on_hand_h = TORQUE_SCALE * (M.T @ torque_on_hand_rb)
+    torque_on_hand_h = clip_norm(torque_on_hand_h, MAX_TORQUE)
+
+    return torque_on_hand_h, gap, gap_vel
 
 
 # =====================================================================
@@ -350,10 +352,6 @@ def build_unity_tool_state(model, data, side):
 
 
 def get_unity_tool_bodies(model, side):
-    """
-    Return only the six MuJoCo bodies that MujocoBridge.cs actually uses for one dVRK instrument.
-    This is intentionally filtered to keep UDP datagrams below the fragmentation threshold.
-    """
     prefix = f"{side}_"
     selected = []
 
@@ -366,11 +364,6 @@ def get_unity_tool_bodies(model, side):
 
         if short_name in UNITY_BODY_SUFFIXES:
             selected.append(name)
-
-    if len(selected) != 6:
-        print(f"WARNING: expected 6 Unity bodies for {side}, found {len(selected)}")
-        for name in selected:
-            print(f"  {name}")
 
     return selected
 
@@ -392,16 +385,7 @@ def main():
     left_unity_bodies = get_unity_tool_bodies(model, "left")
     right_unity_bodies = get_unity_tool_bodies(model, "right")
 
-    print("\nUnity bodies:")
-    print("LEFT:")
-    for name in left_unity_bodies:
-        print(f"  {name}")
-    print("RIGHT:")
-    for name in right_unity_bodies:
-        print(f"  {name}")
-
     print(f"\n[Unity bridge] state -> {UNITY_HOST}:{STATE_PORT} @ {STATE_SEND_HZ:.0f} Hz")
-    print("[Unity bridge] alternating left/right visual bodies to avoid UDP fragmentation.")
 
     mocap_ids = {
         side: get_mocap_id(model, body_name) for side, body_name in MOCAP_BODIES.items()
@@ -442,75 +426,65 @@ def main():
             controller.forceModeSetDamping(DAMPING)
             controller.forceModeSetGainScaling(GAIN_SCALING)
 
-        print("Connected. Both arms become compliant now.")
+        print("Connected. Launching MuJoCo viewer alongside Unity transmission...")
 
-        with mujoco.viewer.launch_passive(model, data) as viewer:
-            print("Dual-arm teleoperation running.")
+        W_start = {side: receiver.getActualTCPPose() for side, receiver in receivers.items()}
 
-            # Force window into fullscreen using GLFW context handle
-            try:
-                if hasattr(viewer, "window") and viewer.window is not None:
-                    monitor = mujoco.glfw.glfwGetPrimaryMonitor()
-                    mode = mujoco.glfw.glfwGetVideoMode(monitor)
-                    mujoco.glfw.glfwSetWindowMonitor(
-                        viewer.window, monitor, 0, 0, mode.width, mode.height, mode.refreshRate
-                    )
-            except Exception as e:
-                print(f"Note: Automatic fullscreen toggle bypassed or unsupported in current environment: {e}")
+        if model.nkey > 0:
+            mujoco.mj_resetDataKeyframe(model, data, 0)
 
-            W_start = {side: receiver.getActualTCPPose() for side, receiver in receivers.items()}
+        disable_mocap_welds(model, data, mocap_body_ids)
+        mujoco.mj_forward(model, data)
 
-            if model.nkey > 0:
-                mujoco.mj_resetDataKeyframe(model, data, 0)
+        P_start = {side: site_pose_rb(iks[side], data) for side in ips}
+        mujoco.mj_forward(model, data)
 
-            disable_mocap_welds(model, data, mocap_body_ids)
-            mujoco.mj_forward(model, data)
-
-            P_start = {side: site_pose_rb(iks[side], data) for side in ips}
-            mujoco.mj_forward(model, data)
-
-            for side in ips:
-                Rw = R_WORLD_H[side]
-                valid_rotation = np.allclose(Rw.T @ Rw, np.eye(3)) and np.isclose(
-                    np.linalg.det(Rw), 1.0
+        for side in ips:
+            Rw = R_WORLD_H[side]
+            valid_rotation = np.allclose(Rw.T @ Rw, np.eye(3)) and np.isclose(
+                np.linalg.det(Rw), 1.0
+            )
+            if not valid_rotation:
+                raise ValueError(
+                    f"R_WORLD_H['{side}'] must be a proper rotation (orthonormal, det +1)."
                 )
-                if not valid_rotation:
-                    raise ValueError(
-                        f"R_WORLD_H['{side}'] must be a proper rotation (orthonormal, det +1)."
-                    )
 
-            R_RB_H = {side: iks[side].R_rb.T @ R_WORLD_H[side] for side in ips}
-            print("Computed R_RB_H successfully:", R_RB_H)
+        R_RB_H = {side: iks[side].R_rb.T @ R_WORLD_H[side] for side in ips}
 
-            hand_start = {}
-            for side in ips:
-                H0 = vector_to_htm(W_start[side])
-                hand_start[side] = (H0[:3, 3].copy(), H0[:3, :3].copy())
+        hand_start = {}
+        for side in ips:
+            H0 = vector_to_htm(W_start[side])
+            hand_start[side] = (H0[:3, 3].copy(), H0[:3, :3].copy())
 
-            tool_start = P_start
-            q_cmd = {side: data.qpos[iks[side].qpos_ids].copy() for side in ips}
+        tool_start = P_start
+        q_cmd = {side: data.qpos[iks[side].qpos_ids].copy() for side in ips}
 
-            for side in ips:
-                iks[side].q_last[:] = q_cmd[side]
+        for side in ips:
+            iks[side].q_last[:] = q_cmd[side]
 
-            ik_ok = {side: True for side in ips}
-            ik_ms_sum = 0.0
-            ik_ms_max = 0.0
-            ik_calls = 0
-            loop = 0
+        ik_ok = {side: True for side in ips}
+        ik_calls = 0
 
-            # --- HAPTICS: per-arm state ---
-            wrench = {side: list(WRENCH) for side in ips}  # what forceMode sends, per arm
-            p_targets = {side: tool_start[side][0].copy() for side in ips}
-            prev_gap = {side: np.zeros(3) for side in ips}
-            force_arrows = []
-            haptic_t0 = time.perf_counter()
-            prev_time = haptic_t0
+        # --- HAPTICS: per-arm state ---
+        wrench = {side: list(WRENCH) for side in ips}
+        p_targets = {side: tool_start[side][0].copy() for side in ips}
+        prev_gap = {side: np.zeros(3) for side in ips}
 
+        # --- TORQUE HAPTICS: per-arm state ---
+        R_targets = {side: tool_start[side][1].copy() for side in ips}
+        prev_rot_gap = {side: np.zeros(3) for side in ips}
+        rot_gap_vel = {side: np.zeros(3) for side in ips}
+        torque_cmd = {side: np.zeros(3) for side in ips}
+
+        haptic_t0 = time.perf_counter()
+        prev_time = haptic_t0
+
+        # Launch the MuJoCo passive viewer
+        with mujoco.viewer.launch_passive(model, data) as viewer:
             while running and viewer.is_running():
                 loop_start = time.perf_counter()
 
-                # --- HAPTICS: each arm gets its own wrench (zero until haptics ramp in) ---
+                # --- HAPTICS: each arm gets its own wrench ---
                 for side, controller in controllers.items():
                     controller.forceMode(
                         TASK_FRAME, SELECTION_VECTOR, wrench[side], FORCE_TYPE, LIMITS
@@ -519,7 +493,6 @@ def main():
                 poses = {side: receiver.getActualTCPPose() for side, receiver in receivers.items()}
 
                 # IK Solver loop
-                ik_t0 = time.perf_counter()
                 for side, pose in poses.items():
                     H1 = vector_to_htm(pose)
                     p_h1 = H1[:3, 3]
@@ -531,100 +504,80 @@ def main():
 
                     p_target = p_rb0 + SCALE * (M @ (p_h1 - p_h0))
                     R_target = (M @ (R_h1 @ R_h0.T) @ M.T) @ R_rb0
-                    p_targets[side] = p_target  # --- HAPTICS: the coupling needs the target
+                    p_targets[side] = p_target
+                    R_targets[side] = R_target
 
                     target_quat = mat_to_quat(R_target)
                     result = iks[side].solve(p_target, target_quat, frame="rb")
-
-                    # =====================================================
-                    # DEBUG TOOL: Print site target vs IK solver output
-                    # =====================================================
-                    if ik_calls % 100 == 0:
-                        print(f"\n--- [DEBUG] Iteration {ik_calls} | Side: {side} ---")
-                        print(f"  Target Site Position (p_target)  : {np.round(p_target, 4)}")
-                        print(f"  Target Site Quaternion (R_target): {np.round(target_quat, 4)}")
-                        print(f"  IK Solver Converged              : {result.converged}")
-                        print(f"  IK Solver Obtained Joints (q)    : {np.round(result.q, 4) if result.converged else 'N/A'}")
-                        print(f"  Position Error                   : {result.pos_err * 1000:.2f} mm")
-                        print(f"  Rotation Error                   : {result.rot_err * 1000:.2f} mrad")
 
                     if result.converged:
                         q_cmd[side] = result.q
 
                     if result.converged != ik_ok[side]:
                         ik_ok[side] = result.converged
-                        if result.converged:
-                            status = "recovered"
-                        else:
-                            status = (
-                                f"FAILED (target unreachable? pos_err={result.pos_err * 1000:.1f} mm, "
-                                f"rot_err={result.rot_err * 1000:.0f} mrad), holding last command"
-                            )
+                        status = "recovered" if result.converged else "FAILED"
                         print(f"[{side}] IK {status}")
 
-                ik_ms = (time.perf_counter() - ik_t0) * 1000.0
-                ik_ms_sum += ik_ms
-                ik_ms_max = max(ik_ms_max, ik_ms)
                 ik_calls += 1
 
-                if ik_calls % 500 == 0:
-                    print(
-                        f"IK time for both arms: avg {ik_ms_sum / 500:.2f} ms, max {ik_ms_max:.2f} ms"
-                    )
-                    ik_ms_sum = 0.0
-                    ik_ms_max = 0.0
-
                 # MuJoCo Simulation Update
-                with viewer.lock():
-                    for side, pose in poses.items():
-                        pos, quat = transform_pose(pose, FRAME_OFFSETS[side])
-                        data.mocap_pos[mocap_ids[side]] = pos
-                        data.mocap_quat[mocap_ids[side]] = quat
+                for side, pose in poses.items():
+                    pos, quat = transform_pose(pose, FRAME_OFFSETS[side])
+                    data.mocap_pos[mocap_ids[side]] = pos
+                    data.mocap_quat[mocap_ids[side]] = quat
 
-                    for side in ips:
-                        data.ctrl[act_ids[side]] = q_cmd[side]
+                for side in ips:
+                    data.ctrl[act_ids[side]] = q_cmd[side]
 
-                    for _ in range(steps_per_loop):
-                        mujoco.mj_step(model, data)
+                for _ in range(steps_per_loop):
+                    mujoco.mj_step(model, data)
 
-                    # --- HAPTICS: virtual coupling between each IK target and its tool ---
-                    now_h = time.perf_counter()
-                    dt_h = max(now_h - prev_time, 1e-4)
-                    prev_time = now_h
+                # Sync MuJoCo passive viewer graphics
+                viewer.sync()
 
-                    # Zero force during the startup delay, then a linear ramp up to full strength.
-                    ramp_s = max(HAPTIC_RAMP_S, 1e-6)
-                    ramp = min(1.0, max(0.0, (now_h - haptic_t0 - HAPTIC_STARTUP_DELAY_S) / ramp_s))
+                # --- HAPTICS: virtual coupling calculations ---
+                now_h = time.perf_counter()
+                dt_h = max(now_h - prev_time, 1e-4)
+                prev_time = now_h
 
-                    force_arrows = []
-                    for side in ips:
-                        p_ee_rb, _ = site_pose_rb(iks[side], data)
-                        force_h, force_rb, gap = coupling_force_on_hand(
-                            p_targets[side], p_ee_rb, prev_gap[side], dt_h, R_RB_H[side]
+                ramp_s = max(HAPTIC_RAMP_S, 1e-6)
+                ramp = min(1.0, max(0.0, (now_h - haptic_t0 - HAPTIC_STARTUP_DELAY_S) / ramp_s))
+                stalled = dt_h > HAPTIC_MAX_DT_S
+
+                for side in ips:
+                    p_ee_rb, R_ee_rb = site_pose_rb(iks[side], data)
+
+                    force_h, force_rb, gap = coupling_force_on_hand(
+                        p_targets[side], p_ee_rb, prev_gap[side], dt_h, R_RB_H[side]
+                    )
+                    prev_gap[side] = gap
+
+                    if not HAPTICS_ENABLED or stalled:
+                        force_h = np.zeros(3)
+
+                    wrench[side][0:3] = (ramp * force_h).tolist()
+
+                    torque_h, rot_gap, rot_gap_vel[side] = coupling_torque_on_hand(
+                        R_targets[side],
+                        R_ee_rb,
+                        prev_rot_gap[side],
+                        rot_gap_vel[side],
+                        dt_h,
+                        R_RB_H[side],
+                    )
+                    prev_rot_gap[side] = rot_gap
+
+                    omega = float(np.linalg.norm(receivers[side].getActualTCPSpeed()[3:6]))
+                    torque_h = torque_h * speed_taper(omega)
+
+                    if not TORQUE_HAPTICS_ENABLED or stalled:
+                        torque_cmd[side] = np.zeros(3)
+                    else:
+                        torque_cmd[side] = slew_limit_norm(
+                            torque_cmd[side], torque_h, MAX_TORQUE_RATE * dt_h
                         )
-                        prev_gap[side] = gap
 
-                        if not HAPTICS_ENABLED or dt_h > HAPTIC_MAX_DT_S:
-                            force_h = np.zeros(3)
-
-                        wrench[side][0:3] = (ramp * force_h).tolist()
-
-                        # Arrow: the force on the hand, drawn at the end effector in world axes.
-                        force_arrows.append(
-                            (data.site_xpos[iks[side].site_id].copy(), iks[side].R_rb @ force_rb)
-                        )
-
-                        if loop % HAPTIC_PRINT_EVERY_N_LOOPS == 0:
-                            print(
-                                f"[{side}] haptics: |gap| {np.linalg.norm(gap) * 1000:.1f} mm, "
-                                f"wrench {np.round(wrench[side][0:3], 2)} N, ramp {ramp:.2f}"
-                            )
-
-                loop += 1
-                if loop % RENDER_EVERY_N_LOOPS == 0:
-                    with viewer.lock():
-                        draw_force_arrows(viewer, force_arrows)
-                    viewer.sync()
+                    wrench[side][3:6] = (ramp * torque_cmd[side]).tolist()
 
                 # Unity UDP Publication
                 now = time.perf_counter()
@@ -656,15 +609,6 @@ def main():
                     state["t_send"] = now
 
                     payload = json.dumps(state, separators=(",", ":")).encode()
-
-                    if unity_seq <= 2:
-                        print(
-                            f"[Unity bridge] seq={unity_seq} side={packet_side} bytes={len(payload)}"
-                        )
-
-                    if len(payload) > 1450:
-                        print(f"WARNING: Unity packet {unity_seq} is {len(payload)} bytes (>1450).")
-
                     unity_tx.sendto(payload, (UNITY_HOST, STATE_PORT))
                     next_unity_send += unity_period
 
