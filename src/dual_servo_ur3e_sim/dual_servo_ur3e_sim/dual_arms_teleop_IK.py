@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 import mujoco
+import mujoco.glfw
 import mujoco.viewer
 import numpy as np
 import rtde_control
@@ -70,14 +71,14 @@ UNITY_BODY_SUFFIXES = (
 
 TASK_FRAME = [0, 0, 0, 0, 0, 0]
 SELECTION_VECTOR = [1, 1, 1, 1, 1, 1]
-WRENCH = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+WRENCH = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # zero wrench: the starting point for every arm
 FORCE_TYPE = 2
 LIMITS = [0.1, 0.1, 1.5, 3.14, 3.14, 0.5]
 DAMPING = 0.004
 GAIN_SCALING = 1.0
 
 CONTROL_PERIOD_S = 0.008
-RENDER_EVERY_N_LOOPS = 10
+RENDER_EVERY_N_LOOPS = 2
 
 # =====================================================================
 # Coordinate transforms
@@ -97,6 +98,31 @@ R_WORLD_H = {
 }
 
 SCALE = 0.5
+
+# =====================================================================
+# Haptic feedback (virtual coupling, as in the sphere test)
+# =====================================================================
+
+# A spring-damper couples the hand's target (the IK target) to the tool's end effector.
+# When the tool is blocked, the gap between them grows and the reaction force is sent to
+# the UR arm as the forceMode wrench. Unlike the sphere test, the tool is driven by the IK
+# and its position actuators, so the coupling force is computed but not applied to the tool.
+HAPTICS_ENABLED = True
+
+STIFFNESS_LIN = 2800.0  # N/m
+DAMPING_LIN = 15.0  # N/(m/s)
+GAP_DEADBAND_M = 0.002  # gaps below this render no force (hides the tool's tracking lag)
+INTERNAL_MAX_FORCE = 100.0  # clip of the coupling force, per axis (N)
+FORCE_SCALE = 0.4  # gain from tool force to hand force
+MAX_FORCE = 100.0  # clip of the force sent to each robot, per axis (N). Raise gradually.
+
+HAPTIC_STARTUP_DELAY_S = 2.0  # zero force for this long after the loop starts
+HAPTIC_RAMP_S = 1.0  # then ramp the force in over this long
+HAPTIC_MAX_DT_S = 0.05  # a loop cycle slower than this sends zero force (stall protection)
+HAPTIC_PRINT_EVERY_N_LOOPS = 100
+
+ARROW_LENGTH_SCALE = 0.01  # metres of arrow per newton
+ARROW_WIDTH = 0.004
 
 # =====================================================================
 # MuJoCo helpers
@@ -208,6 +234,72 @@ def disable_mocap_welds(model, data, mocap_body_ids):
             disabled += 1
 
     print(f"Disabled {disabled} mocap weld(s).")
+
+
+# =====================================================================
+# Haptic helpers
+# =====================================================================
+
+
+def coupling_force_on_hand(p_target, p_ee, prev_gap, dt, M):
+    """Virtual coupling between the IK target and the tool's end effector.
+
+    p_target : where the hand wants the tool, in {RB}
+    p_ee     : where the tool's end effector is, in {RB}
+    prev_gap : the gap from the previous loop, for the damping term
+    dt       : time since the previous loop
+    M        : rotation from the UR base axes to {RB} (R_RB_H)
+
+    Returns (force on the hand in the UR base frame, force on the hand in {RB}, gap).
+    """
+    gap = p_target - p_ee
+    gap_vel = (gap - prev_gap) / dt
+
+    # Soft deadband: the first GAP_DEADBAND_M of the gap renders nothing, so the tool's
+    # ordinary tracking lag does not push back on the hand.
+    gap_norm = np.linalg.norm(gap)
+    if gap_norm > GAP_DEADBAND_M:
+        gap_eff = gap * (gap_norm - GAP_DEADBAND_M) / gap_norm
+        proxy_force = STIFFNESS_LIN * gap_eff + DAMPING_LIN * gap_vel
+    else:
+        proxy_force = np.zeros(3)
+
+    # Force the spring-damper puts on the tool, then the equal and opposite force on the hand.
+    proxy_force = np.clip(proxy_force, -INTERNAL_MAX_FORCE, INTERNAL_MAX_FORCE)
+    force_on_hand_rb = -proxy_force
+
+    # {RB} -> UR base axes, scaled and limited.
+    force_on_hand_h = FORCE_SCALE * (M.T @ force_on_hand_rb)
+    force_on_hand_h = np.clip(force_on_hand_h, -MAX_FORCE, MAX_FORCE)
+
+    return force_on_hand_h, force_on_hand_rb, gap
+
+
+def draw_force_arrows(viewer, arrows):
+    """Draws one red arrow per (start, force) pair, in world coordinates."""
+    scn = viewer.user_scn
+    scn.ngeom = 0
+
+    for start, force in arrows:
+        if np.linalg.norm(force) < 1e-6:
+            continue
+
+        mujoco.mjv_initGeom(
+            scn.geoms[scn.ngeom],
+            type=mujoco.mjtGeom.mjGEOM_ARROW,
+            size=np.zeros(3),
+            pos=np.zeros(3),
+            mat=np.eye(3).flatten(),
+            rgba=np.array([1.0, 0.0, 0.0, 1.0], dtype=np.float32),
+        )
+        mujoco.mjv_connector(
+            scn.geoms[scn.ngeom],
+            mujoco.mjtGeom.mjGEOM_ARROW,
+            ARROW_WIDTH,
+            start,
+            start + force * ARROW_LENGTH_SCALE,
+        )
+        scn.ngeom += 1
 
 
 # =====================================================================
@@ -355,6 +447,17 @@ def main():
         with mujoco.viewer.launch_passive(model, data) as viewer:
             print("Dual-arm teleoperation running.")
 
+            # Force window into fullscreen using GLFW context handle
+            try:
+                if hasattr(viewer, "window") and viewer.window is not None:
+                    monitor = mujoco.glfw.glfwGetPrimaryMonitor()
+                    mode = mujoco.glfw.glfwGetVideoMode(monitor)
+                    mujoco.glfw.glfwSetWindowMonitor(
+                        viewer.window, monitor, 0, 0, mode.width, mode.height, mode.refreshRate
+                    )
+            except Exception as e:
+                print(f"Note: Automatic fullscreen toggle bypassed or unsupported in current environment: {e}")
+
             W_start = {side: receiver.getActualTCPPose() for side, receiver in receivers.items()}
 
             if model.nkey > 0:
@@ -396,12 +499,21 @@ def main():
             ik_calls = 0
             loop = 0
 
+            # --- HAPTICS: per-arm state ---
+            wrench = {side: list(WRENCH) for side in ips}  # what forceMode sends, per arm
+            p_targets = {side: tool_start[side][0].copy() for side in ips}
+            prev_gap = {side: np.zeros(3) for side in ips}
+            force_arrows = []
+            haptic_t0 = time.perf_counter()
+            prev_time = haptic_t0
+
             while running and viewer.is_running():
                 loop_start = time.perf_counter()
 
-                for controller in controllers.values():
+                # --- HAPTICS: each arm gets its own wrench (zero until haptics ramp in) ---
+                for side, controller in controllers.items():
                     controller.forceMode(
-                        TASK_FRAME, SELECTION_VECTOR, WRENCH, FORCE_TYPE, LIMITS
+                        TASK_FRAME, SELECTION_VECTOR, wrench[side], FORCE_TYPE, LIMITS
                     )
 
                 poses = {side: receiver.getActualTCPPose() for side, receiver in receivers.items()}
@@ -419,8 +531,22 @@ def main():
 
                     p_target = p_rb0 + SCALE * (M @ (p_h1 - p_h0))
                     R_target = (M @ (R_h1 @ R_h0.T) @ M.T) @ R_rb0
+                    p_targets[side] = p_target  # --- HAPTICS: the coupling needs the target
 
-                    result = iks[side].solve(p_target, mat_to_quat(R_target), frame="rb")
+                    target_quat = mat_to_quat(R_target)
+                    result = iks[side].solve(p_target, target_quat, frame="rb")
+
+                    # =====================================================
+                    # DEBUG TOOL: Print site target vs IK solver output
+                    # =====================================================
+                    if ik_calls % 100 == 0:
+                        print(f"\n--- [DEBUG] Iteration {ik_calls} | Side: {side} ---")
+                        print(f"  Target Site Position (p_target)  : {np.round(p_target, 4)}")
+                        print(f"  Target Site Quaternion (R_target): {np.round(target_quat, 4)}")
+                        print(f"  IK Solver Converged              : {result.converged}")
+                        print(f"  IK Solver Obtained Joints (q)    : {np.round(result.q, 4) if result.converged else 'N/A'}")
+                        print(f"  Position Error                   : {result.pos_err * 1000:.2f} mm")
+                        print(f"  Rotation Error                   : {result.rot_err * 1000:.2f} mrad")
 
                     if result.converged:
                         q_cmd[side] = result.q
@@ -461,8 +587,43 @@ def main():
                     for _ in range(steps_per_loop):
                         mujoco.mj_step(model, data)
 
+                    # --- HAPTICS: virtual coupling between each IK target and its tool ---
+                    now_h = time.perf_counter()
+                    dt_h = max(now_h - prev_time, 1e-4)
+                    prev_time = now_h
+
+                    # Zero force during the startup delay, then a linear ramp up to full strength.
+                    ramp_s = max(HAPTIC_RAMP_S, 1e-6)
+                    ramp = min(1.0, max(0.0, (now_h - haptic_t0 - HAPTIC_STARTUP_DELAY_S) / ramp_s))
+
+                    force_arrows = []
+                    for side in ips:
+                        p_ee_rb, _ = site_pose_rb(iks[side], data)
+                        force_h, force_rb, gap = coupling_force_on_hand(
+                            p_targets[side], p_ee_rb, prev_gap[side], dt_h, R_RB_H[side]
+                        )
+                        prev_gap[side] = gap
+
+                        if not HAPTICS_ENABLED or dt_h > HAPTIC_MAX_DT_S:
+                            force_h = np.zeros(3)
+
+                        wrench[side][0:3] = (ramp * force_h).tolist()
+
+                        # Arrow: the force on the hand, drawn at the end effector in world axes.
+                        force_arrows.append(
+                            (data.site_xpos[iks[side].site_id].copy(), iks[side].R_rb @ force_rb)
+                        )
+
+                        if loop % HAPTIC_PRINT_EVERY_N_LOOPS == 0:
+                            print(
+                                f"[{side}] haptics: |gap| {np.linalg.norm(gap) * 1000:.1f} mm, "
+                                f"wrench {np.round(wrench[side][0:3], 2)} N, ramp {ramp:.2f}"
+                            )
+
                 loop += 1
                 if loop % RENDER_EVERY_N_LOOPS == 0:
+                    with viewer.lock():
+                        draw_force_arrows(viewer, force_arrows)
                     viewer.sync()
 
                 # Unity UDP Publication

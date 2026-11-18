@@ -2,7 +2,7 @@
   <compiler angle="radian" meshdir="../mesh/high_res" autolimits="true"/>
   <option timestep="0.002"/>
   <default>
-    <joint armature="0.001" damping="0.01"/>
+    <joint armature="0.001" damping="0.05"/>
     <default class="visual">
       <geom contype="0" conaffinity="0"/>
     </default>
@@ -58,11 +58,11 @@
   </asset>
 
   <actuator>
-    <position name="act_roll" joint="joint_roll" kp="100" ctrlrange="-3.14159 3.14159" forcerange="-0.05 0.05"/>
-    <position name="act_pitch" joint="joint_pitch" kp="100" ctrlrange="-1.5708 1.5708" forcerange="-0.05 0.05"/>
-    <position name="act_yaw" joint="joint_yaw" kp="100" ctrlrange="-1.5708 1.5708" forcerange="-0.05 0.05"/>
-    <position name="act_gripper_left" joint="joint_gripper_left" kp="5" ctrlrange="0 1.0472" forcerange="-0.02 0.02"/>
-    <position name="act_gripper_right" joint="joint_gripper_right" kp="5" ctrlrange="0 1.0472" forcerange="-0.02 0.02"/>
+    <position name="act_roll" joint="joint_roll" kp="50" ctrlrange="-3.14159 3.14159" forcerange="-0.15 0.15"/>
+    <position name="act_pitch" joint="joint_pitch" kp="50" ctrlrange="-1.5708 1.5708" forcerange="-0.15 0.15"/>
+    <position name="act_yaw" joint="joint_yaw" kp="50" ctrlrange="-1.5708 1.5708" forcerange="-0.15 0.15"/>
+    <position name="act_gripper_left" joint="joint_gripper_left" kp="10" ctrlrange="0 1.0472" forcerange="-0.04 0.04"/>
+    <position name="act_gripper_right" joint="joint_gripper_right" kp="10" ctrlrange="0 1.0472" forcerange="-0.04 0.04"/>
   </actuator>
 
   <contact>
