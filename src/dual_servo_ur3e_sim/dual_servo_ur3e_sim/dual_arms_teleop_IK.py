@@ -1,12 +1,12 @@
 import json
 import signal
 import socket
+import sys
 import threading
 import time
 from pathlib import Path
 
 import mujoco
-import mujoco.viewer
 import numpy as np
 import rtde_control
 import rtde_receive
@@ -38,7 +38,7 @@ PORT_BODIES = {
 # Symmetric 1-DOF gripper toggle & grip strength configuration
 # =====================================================================
 
-# Single open/close target angle (rad) per tool.
+# Space toggles LEFT tool jaws; Ctrl toggles RIGHT tool jaws.
 # Slightly negative GRIPPER_CLOSED_POS applies firm closing preload onto grasped objects
 # (automatically clamped to joint limits).
 GRIPPER_CLOSED_POS = -0.05
@@ -167,6 +167,41 @@ OMEGA_SOFT = 0.6  # rad/s: above this TCP rotation speed the torque starts to fa
 OMEGA_HARD = 1.5  # rad/s: at this speed (or faster) the torque is zero
 
 # =====================================================================
+# Drift mitigation (bias-cancelling wrench offset)
+# =====================================================================
+
+# Force mode with a zero wrench lets the arm creep: the F/T sensor reports a small phantom
+# force and the compliant arm moves along it. While the arm is nearly still and no haptic
+# force is being rendered, a slow average of the sensor reading estimates that phantom force.
+# The wrench that is sent is offset against it (clamped to a few N), so it stops turning
+# into motion. Run with --no-drift-comp to compare against the old behavior.
+DRIFT_COMPENSATION_ENABLED = "--no-drift-comp" not in sys.argv
+ASK_BEFORE_ZEROING = True  # wait for Enter, so the sensors are zeroed with the arms still and untouched
+
+# One set per arm: the UR3 (left) and the UR3e (right) have different sensors, so tune them apart.
+#   sign       -1 assumes the sensor reports the force acting ON the tool while the wrench is the
+#              force the robot applies. If an arm drifts MORE with compensation on, use +1.
+#   tau        time constant of the bias estimate (s)
+#   quiet_lin  below this TCP speed (m/s) and quiet_ang (rad/s) the arm counts as "still"
+#   clamp      largest offset per axis (N, N, N, N·m, N·m, N·m)
+_DRIFT_DEFAULT = {
+    "sign": -1.0,
+    "tau": 1.0,
+    "quiet_lin": 0.005,
+    "quiet_ang": 0.05,
+    "clamp": np.array([2.0, 2.0, 2.0, 0.2, 0.2, 0.2]),
+}
+DRIFT_SETTINGS = {
+    "left": dict(_DRIFT_DEFAULT),
+    "right": dict(_DRIFT_DEFAULT),
+}
+
+# The estimate only learns while the haptic wrench is below these, so a rendered contact
+# force is never mistaken for drift.
+DRIFT_IDLE_FORCE_N = 0.3
+DRIFT_IDLE_TORQUE_NM = 0.03
+
+# =====================================================================
 # Keyboard gripper toggle (Space = left tool, Ctrl = right tool)
 # =====================================================================
 
@@ -272,7 +307,6 @@ def boost_grip_strength(model, jaw_act_ids: dict[str, dict[str, int]]):
     """Increase gripper actuator stiffness/force limits and jaw contact friction."""
     for side, side_aids in jaw_act_ids.items():
         for suffix, aid in side_aids.items():
-            # For MuJoCo position actuators, gainprm[0] is kp and biasprm[1] is -kp.
             model.actuator_gainprm[aid, 0] *= GRIP_KP_SCALE
             if abs(model.actuator_biasprm[aid, 1]) > 1e-9:
                 model.actuator_biasprm[aid, 1] *= GRIP_KP_SCALE
@@ -281,7 +315,6 @@ def boost_grip_strength(model, jaw_act_ids: dict[str, dict[str, int]]):
                 model.actuator_forcerange[aid, 0] *= GRIP_FORCE_SCALE
                 model.actuator_forcerange[aid, 1] *= GRIP_FORCE_SCALE
 
-            # Also widen actuator ctrlrange slightly if needed so over-closure isn't clipped.
             if model.actuator_ctrlrange[aid, 0] != 0.0 or model.actuator_ctrlrange[aid, 1] != 0.0:
                 lo, hi = model.actuator_ctrlrange[aid, 0], model.actuator_ctrlrange[aid, 1]
                 model.actuator_ctrlrange[aid, 0] = min(lo, GRIPPER_CLOSED_POS - 0.05)
@@ -455,7 +488,17 @@ def coupling_force_on_hand(p_target, p_ee, prev_gap, dt, M):
 
 
 def coupling_torque_on_hand(R_target, R_ee, prev_gap, prev_vel, dt, M):
-    """Rotational virtual coupling between the IK target orientation and the tool's."""
+    """Rotational virtual coupling between the IK target orientation and the tool's.
+
+    R_target : orientation the hand asks for, in {RB} (3x3)
+    R_ee     : the tool's end-effector orientation, in {RB} (3x3)
+    prev_gap : rotation gap from the previous loop, for the damping term
+    prev_vel : smoothed rate of that gap from the previous loop
+    dt       : time since the previous loop
+    M        : rotation from the UR base axes to {RB} (R_RB_H)
+
+    Returns (torque on the hand in the UR base frame, rotation gap in {RB}, smoothed gap rate).
+    """
     gap = R.from_matrix(R_target @ R_ee.T).as_rotvec()
     gap_vel = TORQUE_VEL_FILTER * (gap - prev_gap) / dt + (1.0 - TORQUE_VEL_FILTER) * prev_vel
 
@@ -473,6 +516,32 @@ def coupling_torque_on_hand(R_target, R_ee, prev_gap, prev_vel, dt, M):
     torque_on_hand_h = clip_norm(torque_on_hand_h, MAX_TORQUE)
 
     return torque_on_hand_h, gap, gap_vel
+
+
+def update_drift_offset(bias, force, speed, haptic_wrench, dt, cfg):
+    """Slow estimate of the sensor's phantom wrench. Returns (bias, offset, learning).
+
+    bias          : current estimate (6)
+    force, speed  : the TCP force/torque and TCP velocity just read from the robot (6 each)
+    haptic_wrench : the haptic wrench being rendered (6)
+    dt            : time since the previous loop
+    cfg           : this arm's entry of DRIFT_SETTINGS
+    """
+    still = (
+        np.linalg.norm(speed[:3]) < cfg["quiet_lin"]
+        and np.linalg.norm(speed[3:6]) < cfg["quiet_ang"]
+    )
+    idle = (
+        np.linalg.norm(haptic_wrench[:3]) < DRIFT_IDLE_FORCE_N
+        and np.linalg.norm(haptic_wrench[3:6]) < DRIFT_IDLE_TORQUE_NM
+    )
+
+    learning = bool(still and idle)
+    if learning:
+        bias = bias + min(1.0, dt / cfg["tau"]) * (force - bias)
+
+    offset = cfg["sign"] * np.clip(bias, -cfg["clamp"], cfg["clamp"])
+    return bias, offset, learning
 
 
 # =====================================================================
@@ -536,6 +605,11 @@ def get_unity_tool_bodies(model, side):
         if short_name in UNITY_BODY_SUFFIXES:
             selected.append(name)
 
+    if len(selected) != 6:
+        print(f"WARNING: expected 6 Unity bodies for {side}, found {len(selected)}")
+        for name in selected:
+            print(f"  {name}")
+
     return selected
 
 
@@ -561,7 +635,16 @@ def main():
     left_unity_bodies = get_unity_tool_bodies(model, "left")
     right_unity_bodies = get_unity_tool_bodies(model, "right")
 
+    print("\nUnity bodies:")
+    print("LEFT:")
+    for name in left_unity_bodies:
+        print(f"  {name}")
+    print("RIGHT:")
+    for name in right_unity_bodies:
+        print(f"  {name}")
+
     print(f"\n[Unity bridge] state -> {UNITY_HOST}:{STATE_PORT} @ {STATE_SEND_HZ:.0f} Hz")
+    print("[Unity bridge] alternating left/right visual bodies to avoid UDP fragmentation.")
 
     mocap_ids = {
         side: get_mocap_id(model, body_name) for side, body_name in MOCAP_BODIES.items()
@@ -597,12 +680,17 @@ def main():
 
         time.sleep(1.0)
 
+        if ASK_BEFORE_ZEROING:
+            signal.signal(signal.SIGINT, signal.default_int_handler)
+            input("Put both arms in a clean pose, hands off, then press Enter to zero the F/T sensors...")
+            signal.signal(signal.SIGINT, handle_sigint)
+
         for controller in controllers.values():
             controller.zeroFtSensor()
             controller.forceModeSetDamping(DAMPING)
             controller.forceModeSetGainScaling(GAIN_SCALING)
 
-        print("Connected. Launching MuJoCo viewer alongside Unity transmission...")
+        print("Connected. Both arms become compliant now (Headless mode: rendering in Unity only).")
 
         W_start = {side: receiver.getActualTCPPose() for side, receiver in receivers.items()}
 
@@ -626,6 +714,7 @@ def main():
                 )
 
         R_RB_H = {side: iks[side].R_rb.T @ R_WORLD_H[side] for side in ips}
+        print("Computed R_RB_H successfully:", R_RB_H)
 
         hand_start = {}
         for side in ips:
@@ -639,7 +728,10 @@ def main():
             iks[side].q_last[:] = q_cmd[side]
 
         ik_ok = {side: True for side in ips}
+        ik_ms_sum = 0.0
+        ik_ms_max = 0.0
         ik_calls = 0
+        loop = 0
 
         # --- HAPTICS: per-arm state ---
         wrench = {side: list(WRENCH) for side in ips}
@@ -655,150 +747,219 @@ def main():
         haptic_t0 = time.perf_counter()
         prev_time = haptic_t0
 
-        # Launch the MuJoCo passive viewer
-        with mujoco.viewer.launch_passive(model, data) as viewer:
-            while running and viewer.is_running():
-                loop_start = time.perf_counter()
+        # --- DRIFT MITIGATION: per-arm state ---
+        drift_bias = {side: np.zeros(6) for side in ips}
+        drift_offset = {side: np.zeros(6) for side in ips}
+        drift_learning = {side: False for side in ips}
+        tcp_speed = {side: np.zeros(6) for side in ips}
+        last_loop_start = haptic_t0 - CONTROL_PERIOD_S
 
-                # --- HAPTICS: each arm gets its own wrench ---
-                for side, controller in controllers.items():
-                    controller.forceMode(
-                        TASK_FRAME, SELECTION_VECTOR, wrench[side], FORCE_TYPE, LIMITS
+        while running:
+            loop_start = time.perf_counter()
+            dt_loop = max(loop_start - last_loop_start, 1e-4)
+            last_loop_start = loop_start
+
+            # --- DRIFT MITIGATION + HAPTICS: each arm gets its own wrench ---
+            for side, controller in controllers.items():
+                tcp_speed[side] = np.array(receivers[side].getActualTCPSpeed())
+
+                if DRIFT_COMPENSATION_ENABLED:
+                    tcp_force = np.array(receivers[side].getActualTCPForce())
+                    drift_bias[side], drift_offset[side], drift_learning[side] = update_drift_offset(
+                        drift_bias[side],
+                        tcp_force,
+                        tcp_speed[side],
+                        wrench[side],
+                        dt_loop,
+                        DRIFT_SETTINGS[side],
                     )
 
-                poses = {side: receiver.getActualTCPPose() for side, receiver in receivers.items()}
+                sent_wrench = (np.array(wrench[side]) + drift_offset[side]).tolist()
+                controller.forceMode(
+                    TASK_FRAME, SELECTION_VECTOR, sent_wrench, FORCE_TYPE, LIMITS
+                )
 
-                # IK Solver loop
-                for side, pose in poses.items():
-                    H1 = vector_to_htm(pose)
-                    p_h1 = H1[:3, 3]
-                    R_h1 = H1[:3, :3]
+            poses = {side: receiver.getActualTCPPose() for side, receiver in receivers.items()}
 
-                    p_h0, R_h0 = hand_start[side]
-                    p_rb0, R_rb0 = tool_start[side]
-                    M = R_RB_H[side]
+            # IK Solver loop
+            ik_t0 = time.perf_counter()
+            for side, pose in poses.items():
+                H1 = vector_to_htm(pose)
+                p_h1 = H1[:3, 3]
+                R_h1 = H1[:3, :3]
 
-                    p_target = p_rb0 + SCALE * (M @ (p_h1 - p_h0))
-                    R_target = (M @ (R_h1 @ R_h0.T) @ M.T) @ R_rb0
-                    p_targets[side] = p_target
-                    R_targets[side] = R_target
+                p_h0, R_h0 = hand_start[side]
+                p_rb0, R_rb0 = tool_start[side]
+                M = R_RB_H[side]
 
-                    target_quat = mat_to_quat(R_target)
-                    result = iks[side].solve(p_target, target_quat, frame="rb")
+                p_target = p_rb0 + SCALE * (M @ (p_h1 - p_h0))
+                R_target = (M @ (R_h1 @ R_h0.T) @ M.T) @ R_rb0
+                p_targets[side] = p_target
+                R_targets[side] = R_target
 
+                target_quat = mat_to_quat(R_target)
+                result = iks[side].solve(p_target, target_quat, frame="rb")
+
+                if ik_calls % 100 == 0:
+                    print(f"\n--- [DEBUG] Iteration {ik_calls} | Side: {side} ---")
+                    print(f"  Target Site Position (p_target)  : {np.round(p_target, 4)}")
+                    print(f"  Target Site Quaternion (R_target): {np.round(target_quat, 4)}")
+                    print(f"  IK Solver Converged              : {result.converged}")
+                    print(f"  IK Solver Obtained Joints (q)    : {np.round(result.q, 4) if result.converged else 'N/A'}")
+                    print(f"  Position Error                   : {result.pos_err * 1000:.2f} mm")
+                    print(f"  Rotation Error                   : {result.rot_err * 1000:.2f} mrad")
+
+                if result.converged:
+                    q_cmd[side] = result.q
+
+                if result.converged != ik_ok[side]:
+                    ik_ok[side] = result.converged
                     if result.converged:
-                        q_cmd[side] = result.q
-
-                    if result.converged != ik_ok[side]:
-                        ik_ok[side] = result.converged
-                        status = "recovered" if result.converged else "FAILED"
-                        print(f"[{side}] IK {status}")
-
-                ik_calls += 1
-
-                # MuJoCo Simulation Update
-                for side, pose in poses.items():
-                    pos, quat = transform_pose(pose, FRAME_OFFSETS[side])
-                    data.mocap_pos[mocap_ids[side]] = pos
-                    data.mocap_quat[mocap_ids[side]] = quat
-
-                for side in ips:
-                    data.ctrl[act_ids[side]] = q_cmd[side]
-
-                # Symmetric 1-DOF jaw toggle per tool (Space = left, Ctrl = right)
-                gripper_states = gripper_ctrl.consume_toggles_and_get_states()
-                apply_symmetric_gripper_ctrl(data, jaw_act_ids, gripper_states)
-
-                for _ in range(steps_per_loop):
-                    mujoco.mj_step(model, data)
-
-                # Sync MuJoCo passive viewer graphics
-                viewer.sync()
-
-                # --- HAPTICS: virtual coupling calculations ---
-                now_h = time.perf_counter()
-                dt_h = max(now_h - prev_time, 1e-4)
-                prev_time = now_h
-
-                ramp_s = max(HAPTIC_RAMP_S, 1e-6)
-                ramp = min(1.0, max(0.0, (now_h - haptic_t0 - HAPTIC_STARTUP_DELAY_S) / ramp_s))
-                stalled = dt_h > HAPTIC_MAX_DT_S
-
-                for side in ips:
-                    p_ee_rb, R_ee_rb = site_pose_rb(iks[side], data)
-
-                    force_h, force_rb, gap = coupling_force_on_hand(
-                        p_targets[side], p_ee_rb, prev_gap[side], dt_h, R_RB_H[side]
-                    )
-                    prev_gap[side] = gap
-
-                    if not HAPTICS_ENABLED or stalled:
-                        force_h = np.zeros(3)
-
-                    wrench[side][0:3] = (ramp * force_h).tolist()
-
-                    torque_h, rot_gap, rot_gap_vel[side] = coupling_torque_on_hand(
-                        R_targets[side],
-                        R_ee_rb,
-                        prev_rot_gap[side],
-                        rot_gap_vel[side],
-                        dt_h,
-                        R_RB_H[side],
-                    )
-                    prev_rot_gap[side] = rot_gap
-
-                    omega = float(np.linalg.norm(receivers[side].getActualTCPSpeed()[3:6]))
-                    torque_h = torque_h * speed_taper(omega)
-
-                    if not TORQUE_HAPTICS_ENABLED or stalled:
-                        torque_cmd[side] = np.zeros(3)
+                        status = "recovered"
                     else:
-                        torque_cmd[side] = slew_limit_norm(
-                            torque_cmd[side], torque_h, MAX_TORQUE_RATE * dt_h
+                        status = (
+                            f"FAILED (target unreachable? pos_err={result.pos_err * 1000:.1f} mm, "
+                            f"rot_err={result.rot_err * 1000:.0f} mrad), holding last command"
                         )
+                    print(f"[{side}] IK {status}")
 
-                    wrench[side][3:6] = (ramp * torque_cmd[side]).tolist()
+            ik_ms = (time.perf_counter() - ik_t0) * 1000.0
+            ik_ms_sum += ik_ms
+            ik_ms_max = max(ik_ms_max, ik_ms)
+            ik_calls += 1
 
-                # Unity UDP Publication
-                now = time.perf_counter()
-                if now >= next_unity_send:
-                    tools = {
-                        "left_": build_unity_tool_state(model, data, "left"),
-                        "right_": build_unity_tool_state(model, data, "right"),
-                    }
-                    unity_seq += 1
+            if ik_calls % 500 == 0:
+                print(
+                    f"IK time for both arms: avg {ik_ms_sum / 500:.2f} ms, max {ik_ms_max:.2f} ms"
+                )
+                ik_ms_sum = 0.0
+                ik_ms_max = 0.0
 
-                    if unity_seq % 2 == 1:
-                        packet_side = "left"
-                        packet_bodies = left_unity_bodies
-                    else:
-                        packet_side = "right"
-                        packet_bodies = right_unity_bodies
+            # MuJoCo Simulation Update (Headless)
+            for side, pose in poses.items():
+                pos, quat = transform_pose(pose, FRAME_OFFSETS[side])
+                data.mocap_pos[mocap_ids[side]] = pos
+                data.mocap_quat[mocap_ids[side]] = quat
 
-                    state = {
-                        "v": SCHEMA,
-                        "seq": unity_seq,
-                        "t_sim": round(float(data.time), 6),
-                        "ncon": int(data.ncon),
-                        "tools": tools,
-                        "bodies": body_poses(model, data, packet_bodies),
-                        "contacts": [],
-                    }
+            for side in ips:
+                data.ctrl[act_ids[side]] = q_cmd[side]
 
-                    state.update(tools["left_"])
-                    state["t_send"] = now
+            # Symmetric 1-DOF jaw toggle per tool (Space = left, Ctrl = right)
+            gripper_states = gripper_ctrl.consume_toggles_and_get_states()
+            apply_symmetric_gripper_ctrl(data, jaw_act_ids, gripper_states)
 
-                    payload = json.dumps(state, separators=(",", ":")).encode()
-                    unity_tx.sendto(payload, (UNITY_HOST, STATE_PORT))
-                    next_unity_send += unity_period
+            for _ in range(steps_per_loop):
+                mujoco.mj_step(model, data)
 
-                    if next_unity_send < (now - unity_period):
-                        next_unity_send = now + unity_period
+            # --- HAPTICS: virtual coupling calculations ---
+            now_h = time.perf_counter()
+            dt_h = max(now_h - prev_time, 1e-4)
+            prev_time = now_h
 
-                # Maintain loop pacing
-                remaining = CONTROL_PERIOD_S - (time.perf_counter() - loop_start)
-                if remaining > 0:
-                    time.sleep(remaining)
+            ramp_s = max(HAPTIC_RAMP_S, 1e-6)
+            ramp = min(1.0, max(0.0, (now_h - haptic_t0 - HAPTIC_STARTUP_DELAY_S) / ramp_s))
+            stalled = dt_h > HAPTIC_MAX_DT_S
+
+            for side in ips:
+                p_ee_rb, R_ee_rb = site_pose_rb(iks[side], data)
+
+                force_h, force_rb, gap = coupling_force_on_hand(
+                    p_targets[side], p_ee_rb, prev_gap[side], dt_h, R_RB_H[side]
+                )
+                prev_gap[side] = gap
+
+                if not HAPTICS_ENABLED or stalled:
+                    force_h = np.zeros(3)
+
+                wrench[side][0:3] = (ramp * force_h).tolist()
+
+                torque_h, rot_gap, rot_gap_vel[side] = coupling_torque_on_hand(
+                    R_targets[side],
+                    R_ee_rb,
+                    prev_rot_gap[side],
+                    rot_gap_vel[side],
+                    dt_h,
+                    R_RB_H[side],
+                )
+                prev_rot_gap[side] = rot_gap
+
+                omega = float(np.linalg.norm(tcp_speed[side][3:6]))
+                torque_h = torque_h * speed_taper(omega)
+
+                if not TORQUE_HAPTICS_ENABLED or stalled:
+                    torque_cmd[side] = np.zeros(3)
+                else:
+                    torque_cmd[side] = slew_limit_norm(
+                        torque_cmd[side], torque_h, MAX_TORQUE_RATE * dt_h
+                    )
+
+                wrench[side][3:6] = (ramp * torque_cmd[side]).tolist()
+
+                if loop % HAPTIC_PRINT_EVERY_N_LOOPS == 0:
+                    print(
+                        f"[{side}] haptics: |gap| {np.linalg.norm(gap) * 1000:.1f} mm, "
+                        f"|rot gap| {np.degrees(np.linalg.norm(rot_gap)):.1f} deg, "
+                        f"force {np.round(wrench[side][0:3], 2)} N, "
+                        f"torque {np.round(wrench[side][3:6], 3)} N·m, "
+                        f"|w| {omega:.2f} rad/s, ramp {ramp:.2f}"
+                    )
+                    print(
+                        f"[{side}] drift: offset F {np.round(drift_offset[side][0:3], 2)} N, "
+                        f"T {np.round(drift_offset[side][3:6], 3)} N·m, "
+                        f"learning {drift_learning[side]}"
+                    )
+
+            loop += 1
+
+            # Unity UDP Publication
+            now = time.perf_counter()
+            if now >= next_unity_send:
+                tools = {
+                    "left_": build_unity_tool_state(model, data, "left"),
+                    "right_": build_unity_tool_state(model, data, "right"),
+                }
+                unity_seq += 1
+
+                if unity_seq % 2 == 1:
+                    packet_side = "left"
+                    packet_bodies = left_unity_bodies
+                else:
+                    packet_side = "right"
+                    packet_bodies = right_unity_bodies
+
+                state = {
+                    "v": SCHEMA,
+                    "seq": unity_seq,
+                    "t_sim": round(float(data.time), 6),
+                    "ncon": int(data.ncon),
+                    "tools": tools,
+                    "bodies": body_poses(model, data, packet_bodies),
+                    "contacts": [],
+                }
+
+                state.update(tools["left_"])
+                state["t_send"] = now
+
+                payload = json.dumps(state, separators=(",", ":")).encode()
+
+                if unity_seq <= 2:
+                    print(
+                        f"[Unity bridge] seq={unity_seq} side={packet_side} bytes={len(payload)}"
+                    )
+
+                if len(payload) > 1450:
+                    print(f"WARNING: Unity packet {unity_seq} is {len(payload)} bytes (>1450).")
+
+                unity_tx.sendto(payload, (UNITY_HOST, STATE_PORT))
+                next_unity_send += unity_period
+
+                if next_unity_send < (now - unity_period):
+                    next_unity_send = now + unity_period
+
+            # Maintain loop pacing
+            remaining = CONTROL_PERIOD_S - (time.perf_counter() - loop_start)
+            if remaining > 0:
+                time.sleep(remaining)
 
     finally:
         print("Stopping force mode and disconnecting...")
