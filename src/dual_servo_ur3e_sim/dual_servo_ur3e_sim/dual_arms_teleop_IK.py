@@ -1,6 +1,7 @@
 import json
 import signal
 import socket
+import threading
 import time
 from pathlib import Path
 
@@ -11,6 +12,7 @@ import rtde_control
 import rtde_receive
 from IK_solver import JOINT_SUFFIXES, PoseIK, mat_to_quat
 from mujoco_unity_bridge import SCHEMA, STATE_PORT, body_poses, r6
+from pynput import keyboard
 from scipy.spatial.transform import Rotation as R
 
 # =====================================================================
@@ -31,6 +33,30 @@ PORT_BODIES = {
     "left": "left_port",
     "right": "right_port",
 }
+
+# =====================================================================
+# Symmetric 1-DOF gripper toggle & grip strength configuration
+# =====================================================================
+
+# Single open/close target angle (rad) per tool.
+# Slightly negative GRIPPER_CLOSED_POS applies firm closing preload onto grasped objects
+# (automatically clamped to joint limits).
+GRIPPER_CLOSED_POS = -0.05
+GRIPPER_OPEN_POS = 0.3
+GRIPPER_INITIAL_OPEN = {"left": True, "right": True}
+
+# Sign multiplier applied to each jaw joint when setting symmetric opening/closing.
+# Flip a jaw to -1.0 if its joint axis opens in the opposite direction in hello_unity_7dof.xml.
+JAW_SUFFIX_SIGNS = {
+    "joint_gripper_left": 1.0,
+    "joint_gripper_right": 1.0,
+}
+
+# Grip strength multipliers applied directly to MuJoCo gripper actuators & jaw contacts:
+GRIP_KP_SCALE = 3.0       # multiplies position gain kp on gripper actuators
+GRIP_FORCE_SCALE = 4.0    # multiplies actuator forcerange limit on gripper actuators
+JAW_CONDIM = 4            # 4 = sliding + torsional friction; 6 = full 3D + spin/roll
+JAW_FRICTION = np.array([2.0, 0.05, 0.01])
 
 # =====================================================================
 # Unity bridge configuration
@@ -139,6 +165,151 @@ MAX_TORQUE = 1.0  # clip of the torque sent to each robot, by norm (N·m). Raise
 MAX_TORQUE_RATE = 10.0  # N·m/s: the sent torque can change no faster than this
 OMEGA_SOFT = 0.6  # rad/s: above this TCP rotation speed the torque starts to fade out
 OMEGA_HARD = 1.5  # rad/s: at this speed (or faster) the torque is zero
+
+# =====================================================================
+# Keyboard gripper toggle (Space = left tool, Ctrl = right tool)
+# =====================================================================
+
+CTRL_KEYS = {
+    keyboard.Key.ctrl,
+    keyboard.Key.ctrl_l,
+    keyboard.Key.ctrl_r,
+}
+
+
+class KeyboardGripperController:
+    """Edge-triggered keyboard listener: Space toggles left tool, Ctrl toggles right tool."""
+
+    def __init__(self, initial_open: dict[str, bool]):
+        self._lock = threading.Lock()
+        self._is_open = {
+            "left": bool(initial_open.get("left", True)),
+            "right": bool(initial_open.get("right", True)),
+        }
+        self._toggle_pending = {"left": False, "right": False}
+        self._held = {"left": False, "right": False}
+        self._listener: keyboard.Listener | None = None
+
+    def _on_press(self, key):
+        side = None
+        if key == keyboard.Key.space:
+            side = "left"
+        elif key in CTRL_KEYS:
+            side = "right"
+
+        if side is None:
+            return
+
+        with self._lock:
+            if not self._held[side]:
+                self._held[side] = True
+                self._toggle_pending[side] = True
+
+    def _on_release(self, key):
+        side = None
+        if key == keyboard.Key.space:
+            side = "left"
+        elif key in CTRL_KEYS:
+            side = "right"
+
+        if side is None:
+            return
+
+        with self._lock:
+            self._held[side] = False
+
+    def start(self):
+        self._listener = keyboard.Listener(
+            on_press=self._on_press,
+            on_release=self._on_release,
+        )
+        self._listener.daemon = True
+        self._listener.start()
+        print("[Gripper keys] SPACE -> toggle LEFT tool | CTRL -> toggle RIGHT tool")
+
+    def stop(self):
+        if self._listener is not None:
+            self._listener.stop()
+            self._listener = None
+
+    def consume_toggles_and_get_states(self) -> dict[str, bool]:
+        changed: list[str] = []
+        with self._lock:
+            for side in ("left", "right"):
+                if self._toggle_pending[side]:
+                    self._is_open[side] = not self._is_open[side]
+                    self._toggle_pending[side] = False
+                    changed.append(side)
+            states = dict(self._is_open)
+
+        for side in changed:
+            print(f"[Gripper] {side.upper()} tool -> {'OPEN' if states[side] else 'CLOSED'}")
+        return states
+
+
+def get_jaw_actuator_ids(model, side: str) -> dict[str, int]:
+    """Resolve actuator IDs for left and right gripper joints of a given tool side."""
+    aids: dict[str, int] = {}
+    for suffix in JAW_SUFFIX_SIGNS:
+        joint_name = f"{side}_{suffix}"
+        jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+        if jid < 0:
+            raise ValueError(f"Gripper joint not found: '{joint_name}'")
+
+        found = [
+            actuator_id
+            for actuator_id in range(model.nu)
+            if int(model.actuator_trntype[actuator_id]) == int(mujoco.mjtTrn.mjTRN_JOINT)
+            and int(model.actuator_trnid[actuator_id, 0]) == jid
+        ]
+        if not found:
+            raise ValueError(f"No actuator drives gripper joint '{joint_name}'.")
+        aids[suffix] = found[0]
+    return aids
+
+
+def boost_grip_strength(model, jaw_act_ids: dict[str, dict[str, int]]):
+    """Increase gripper actuator stiffness/force limits and jaw contact friction."""
+    for side, side_aids in jaw_act_ids.items():
+        for suffix, aid in side_aids.items():
+            # For MuJoCo position actuators, gainprm[0] is kp and biasprm[1] is -kp.
+            model.actuator_gainprm[aid, 0] *= GRIP_KP_SCALE
+            if abs(model.actuator_biasprm[aid, 1]) > 1e-9:
+                model.actuator_biasprm[aid, 1] *= GRIP_KP_SCALE
+
+            if model.actuator_forcerange[aid, 0] != 0.0 or model.actuator_forcerange[aid, 1] != 0.0:
+                model.actuator_forcerange[aid, 0] *= GRIP_FORCE_SCALE
+                model.actuator_forcerange[aid, 1] *= GRIP_FORCE_SCALE
+
+            # Also widen actuator ctrlrange slightly if needed so over-closure isn't clipped.
+            if model.actuator_ctrlrange[aid, 0] != 0.0 or model.actuator_ctrlrange[aid, 1] != 0.0:
+                lo, hi = model.actuator_ctrlrange[aid, 0], model.actuator_ctrlrange[aid, 1]
+                model.actuator_ctrlrange[aid, 0] = min(lo, GRIPPER_CLOSED_POS - 0.05)
+                model.actuator_ctrlrange[aid, 1] = max(hi, GRIPPER_OPEN_POS + 0.05)
+
+            jid = int(model.actuator_trnid[aid, 0])
+            body_id = int(model.jnt_bodyid[jid])
+            for gid in range(model.ngeom):
+                if int(model.geom_bodyid[gid]) == body_id:
+                    model.geom_condim[gid] = max(int(model.geom_condim[gid]), JAW_CONDIM)
+                    model.geom_friction[gid, 0] = max(float(model.geom_friction[gid, 0]), JAW_FRICTION[0])
+                    model.geom_friction[gid, 1] = max(float(model.geom_friction[gid, 1]), JAW_FRICTION[1])
+                    model.geom_friction[gid, 2] = max(float(model.geom_friction[gid, 2]), JAW_FRICTION[2])
+
+    print(
+        f"[Grip] Boosted gripper actuators (kp x{GRIP_KP_SCALE}, force x{GRIP_FORCE_SCALE}) "
+        f"and jaw friction (condim>={JAW_CONDIM}, mu>={JAW_FRICTION[0]})."
+    )
+
+
+def apply_symmetric_gripper_ctrl(data, jaw_act_ids: dict[str, dict[str, int]], gripper_open: dict[str, bool]):
+    """Drive both jaws of each tool symmetrically from a single 1-DOF open/closed state."""
+    for side in ("left", "right"):
+        mag = GRIPPER_OPEN_POS if gripper_open[side] else GRIPPER_CLOSED_POS
+        for suffix, sign in JAW_SUFFIX_SIGNS.items():
+            aid = jaw_act_ids[side][suffix]
+            data.ctrl[aid] = sign * mag
+
 
 # =====================================================================
 # MuJoCo helpers
@@ -375,7 +546,12 @@ def get_unity_tool_bodies(model, side):
 
 def main():
     model = mujoco.MjModel.from_xml_path(MJCF_PATH)
+    jaw_act_ids = {side: get_jaw_actuator_ids(model, side) for side in ("left", "right")}
+    boost_grip_strength(model, jaw_act_ids)
     data = mujoco.MjData(model)
+
+    gripper_ctrl = KeyboardGripperController(GRIPPER_INITIAL_OPEN)
+    gripper_ctrl.start()
 
     unity_tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     unity_period = 1.0 / STATE_SEND_HZ
@@ -529,6 +705,10 @@ def main():
                 for side in ips:
                     data.ctrl[act_ids[side]] = q_cmd[side]
 
+                # Symmetric 1-DOF jaw toggle per tool (Space = left, Ctrl = right)
+                gripper_states = gripper_ctrl.consume_toggles_and_get_states()
+                apply_symmetric_gripper_ctrl(data, jaw_act_ids, gripper_states)
+
                 for _ in range(steps_per_loop):
                     mujoco.mj_step(model, data)
 
@@ -622,6 +802,7 @@ def main():
 
     finally:
         print("Stopping force mode and disconnecting...")
+        gripper_ctrl.stop()
         try:
             unity_tx.close()
         except Exception:
